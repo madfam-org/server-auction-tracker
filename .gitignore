@@ -1,0 +1,36 @@
+# Go binaries
+/foundry-scout
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test output
+coverage.out
+*.test
+*.prof
+
+# SQLite databases
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Environment / secrets
+.env
+.env.*
+
+# Build
+dist/
+bin/

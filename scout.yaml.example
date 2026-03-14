@@ -1,0 +1,20 @@
+filters:
+  min_ram_gb: 64
+  min_cpu_cores: 8
+  min_drives: 2
+  min_drive_size_gb: 512
+  max_price_eur: 90
+  datacenter_prefix: "HEL1"
+
+scoring:
+  cpu_weight: 0.30
+  ram_weight: 0.25
+  storage_weight: 0.20
+  nvme_weight: 0.10
+  cpu_gen_weight: 0.10
+  locality_weight: 0.05
+
+database:
+  path: "foundry-scout.db"
+
+log_level: "info"
