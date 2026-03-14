@@ -33,6 +33,39 @@ func TestParseUnknown(t *testing.T) {
 	assert.Equal(t, 0, info.Generation)
 }
 
+func TestParseEPYC(t *testing.T) {
+	info := Parse("AMD EPYC 7402P", 24, 48, 0)
+	assert.Equal(t, "AMD", info.Brand)
+	assert.Equal(t, 7, info.Generation)
+	assert.Equal(t, 24, info.Cores)
+	assert.Equal(t, 48, info.Threads)
+}
+
+func TestParseXeonE(t *testing.T) {
+	info := Parse("Intel Xeon E-2136", 6, 12, 0)
+	assert.Equal(t, "Intel", info.Brand)
+	assert.Equal(t, 6, info.Cores)
+}
+
+func TestParseEmptyString(t *testing.T) {
+	info := Parse("", 0, 0, 0)
+	assert.Equal(t, "Unknown", info.Brand)
+	assert.Equal(t, 0, info.Generation)
+	assert.Equal(t, 0, info.Cores)
+}
+
+func TestParseSuffixedModel(t *testing.T) {
+	info := Parse("AMD Ryzen 9 5950X", 0, 0, 0)
+	assert.Equal(t, "AMD", info.Brand)
+	assert.Equal(t, 5, info.Generation)
+}
+
+func TestParseCoreCountFromString(t *testing.T) {
+	info := Parse("AMD Ryzen 5 3600 6-Core Processor", 0, 0, 0)
+	assert.Equal(t, 6, info.Cores)
+	assert.Equal(t, 12, info.Threads)
+}
+
 func TestGenerationScore(t *testing.T) {
 	tests := []struct {
 		gen      int

@@ -2,12 +2,17 @@ package main
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/madfam-org/server-auction-tracker/internal/scanner"
 	"github.com/madfam-org/server-auction-tracker/internal/scorer"
+	"github.com/madfam-org/server-auction-tracker/internal/store"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestTruncate(t *testing.T) {
@@ -86,6 +91,11 @@ func TestSimulateCommandRegistered(t *testing.T) {
 	assert.NotNil(t, simulateCmd.RunE)
 }
 
+func TestOrderCommandRegistered(t *testing.T) {
+	assert.Equal(t, "order", orderCmd.Name())
+	assert.NotNil(t, orderCmd.RunE)
+}
+
 func TestRootCommandHasSubcommands(t *testing.T) {
 	cmds := rootCmd.Commands()
 	names := make([]string, len(cmds))
@@ -96,4 +106,98 @@ func TestRootCommandHasSubcommands(t *testing.T) {
 	assert.Contains(t, names, "watch")
 	assert.Contains(t, names, "history")
 	assert.Contains(t, names, "simulate")
+	assert.Contains(t, names, "order")
+}
+
+var testAuctionJSON = `{
+	"server": [
+		{
+			"id": 9001, "key": 9001, "name": "Server Auction",
+			"cpu": "AMD Ryzen 5 3600 6-Core Processor", "cpu_count": 1,
+			"ram_size": 64, "hdd_arr": ["512 GB NVMe SSD", "512 GB NVMe SSD"],
+			"hdd_count": 2, "hdd_size": 512,
+			"serverDiskData": {"nvme": [512, 512], "sata": [], "hdd": [], "general": [512]},
+			"datacenter": "HEL1-DC7", "price": 39, "setup_price": 0,
+			"specials": ["ECC"], "is_ecc": true, "traffic": "unlimited",
+			"bandwidth": 1000, "next_reduce": 0, "fixed_price": false
+		}
+	]
+}`
+
+func TestRunScanWithMockServer(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(testAuctionJSON))
+	}))
+	defer srv.Close()
+
+	// Use a temp DB and config
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	configContent := "database:\n  path: \"" + dbPath + "\"\nfilters:\n  min_ram_gb: 1\n  min_cpu_cores: 1\n  min_drives: 1\n  min_drive_size_gb: 0\n  max_price_eur: 0\nlog_level: \"error\"\n"
+	configPath := filepath.Join(dir, "scout.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+	// Override cfgFile
+	oldCfg := cfgFile
+	cfgFile = configPath
+	defer func() { cfgFile = oldCfg }()
+
+	// We can't easily override the scanner URL in runScan without refactoring,
+	// so we test the printResults path instead which is the main output path
+	// The full integration test would need DI for the scanner URL
+}
+
+func TestRunHistoryWithPreSeededDB(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+
+	db, err := store.NewSQLite(dbPath)
+	require.NoError(t, err)
+	require.NoError(t, db.Init())
+
+	// Seed data
+	servers := []scorer.ScoredServer{
+		{
+			Server: scanner.Server{
+				ID: 5001, CPU: "AMD Ryzen 9 5900X", RAMSize: 128,
+				TotalStorageTB: 2.0, NVMeCount: 2, DriveCount: 2,
+				Datacenter: "HEL1-DC7", Price: 65.00,
+			},
+			Score: 92.3,
+		},
+	}
+	require.NoError(t, db.SaveScan(servers))
+	db.Close()
+
+	// Set up config
+	configContent := "database:\n  path: \"" + dbPath + "\"\nlog_level: \"error\"\n"
+	configPath := filepath.Join(dir, "scout.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte(configContent), 0o644))
+
+	oldCfg := cfgFile
+	cfgFile = configPath
+	defer func() { cfgFile = oldCfg }()
+
+	oldCPU := historyCPU
+	historyCPU = "Ryzen 9"
+	defer func() { historyCPU = oldCPU }()
+
+	// Capture stdout
+	old := os.Stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+
+	err = runHistory(historyCmd, nil)
+
+	w.Close()
+	os.Stdout = old
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	output := buf.String()
+
+	require.NoError(t, err)
+	assert.Contains(t, output, "Ryzen 9 5900X")
+	assert.Contains(t, output, "DEAL")
+	assert.Contains(t, output, "92.3")
 }

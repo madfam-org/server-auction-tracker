@@ -2,6 +2,7 @@ package scanner
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
@@ -173,6 +174,72 @@ func TestFilterAllSmallDrives(t *testing.T) {
 
 	result := passesFilters(server, filters)
 	assert.False(t, result, "server with all drives < 512GB should fail")
+}
+
+func TestFetchHTTP500(t *testing.T) {
+	client := &mockHTTPClient{
+		response: &http.Response{
+			StatusCode: 500,
+			Body:       io.NopCloser(bytes.NewBufferString("internal server error")),
+		},
+	}
+
+	sc := NewWithURL("http://test.local/data.json", client)
+	_, err := sc.Fetch()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unexpected status code: 500")
+}
+
+func TestFetchNetworkError(t *testing.T) {
+	client := &mockHTTPClient{
+		err: fmt.Errorf("connection refused"),
+	}
+
+	sc := NewWithURL("http://test.local/data.json", client)
+	_, err := sc.Fetch()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "fetching auction data")
+}
+
+func TestFetchMalformedJSON(t *testing.T) {
+	client := &mockHTTPClient{
+		response: &http.Response{
+			StatusCode: 200,
+			Body:       io.NopCloser(bytes.NewBufferString("{invalid json")),
+		},
+	}
+
+	sc := NewWithURL("http://test.local/data.json", client)
+	_, err := sc.Fetch()
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "parsing JSON")
+}
+
+func TestEstimateCoresFromModel(t *testing.T) {
+	tests := []struct {
+		model    string
+		expected int
+	}{
+		{"AMD Ryzen 9 7950X", 16},
+		{"AMD Ryzen 9 5950X", 16},
+		{"AMD Ryzen 9 3900X", 12},
+		{"AMD Ryzen 7 5800X", 8},
+		{"AMD Ryzen 5 3600", 6},
+		{"Intel Core i9-13900K", 24},
+		{"Intel Core i7-13700K", 16},
+		{"Intel Core i5-13500", 14},
+		{"Intel Core i7-12700K", 12},
+		{"Intel Core i5-12400", 10},
+		{"Intel Core i7-8700K", 8},
+		{"Intel Core i7-6700K", 4},
+		{"Intel Xeon E-2136", 8},
+		{"Some Unknown CPU", 4},
+	}
+
+	for _, tt := range tests {
+		cores := estimateCoresFromModel(tt.model)
+		assert.Equal(t, tt.expected, cores, "estimateCoresFromModel(%q)", tt.model)
+	}
 }
 
 func TestFilterNoPrefix(t *testing.T) {
