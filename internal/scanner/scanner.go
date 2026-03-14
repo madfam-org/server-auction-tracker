@@ -216,20 +216,31 @@ func passesFilters(s Server, f config.Filters) bool {
 		return false
 	}
 	if f.MinDriveSizeGB > 0 {
+		hasQualifyingDrive := false
 		for _, size := range s.DiskData.NVMe {
-			if size < f.MinDriveSizeGB {
-				return false
+			if size >= f.MinDriveSizeGB {
+				hasQualifyingDrive = true
+				break
 			}
 		}
-		for _, size := range s.DiskData.SATA {
-			if size < f.MinDriveSizeGB {
-				return false
+		if !hasQualifyingDrive {
+			for _, size := range s.DiskData.SATA {
+				if size >= f.MinDriveSizeGB {
+					hasQualifyingDrive = true
+					break
+				}
 			}
 		}
-		for _, size := range s.DiskData.HDD {
-			if size < f.MinDriveSizeGB {
-				return false
+		if !hasQualifyingDrive {
+			for _, size := range s.DiskData.HDD {
+				if size >= f.MinDriveSizeGB {
+					hasQualifyingDrive = true
+					break
+				}
 			}
+		}
+		if !hasQualifyingDrive {
+			return false
 		}
 	}
 	return true

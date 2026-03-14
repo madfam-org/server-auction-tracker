@@ -135,6 +135,46 @@ func TestFilter(t *testing.T) {
 	assert.Equal(t, 1001, result[0].ID)
 }
 
+func TestFilterMixedDriveSizes(t *testing.T) {
+	// Server with mixed drives: one large NVMe + one small SATA should pass
+	server := Server{
+		ID:       2001,
+		CPU:      "AMD Ryzen 5 3600 6-Core Processor",
+		RAMSize:  64,
+		DiskData: ServerDiskData{NVMe: []int{1024}, SATA: []int{256}, HDD: []int{}},
+		Price:    50,
+		Datacenter: "HEL1-DC7",
+	}
+	enrichServer(&server)
+
+	filters := config.Filters{
+		MinDriveSizeGB: 512,
+	}
+
+	result := passesFilters(server, filters)
+	assert.True(t, result, "server with at least one drive >= 512GB should pass")
+}
+
+func TestFilterAllSmallDrives(t *testing.T) {
+	// Server with all small drives should fail
+	server := Server{
+		ID:       2002,
+		CPU:      "AMD Ryzen 5 3600 6-Core Processor",
+		RAMSize:  64,
+		DiskData: ServerDiskData{NVMe: []int{}, SATA: []int{256, 256}, HDD: []int{}},
+		Price:    30,
+		Datacenter: "HEL1-DC7",
+	}
+	enrichServer(&server)
+
+	filters := config.Filters{
+		MinDriveSizeGB: 512,
+	}
+
+	result := passesFilters(server, filters)
+	assert.False(t, result, "server with all drives < 512GB should fail")
+}
+
 func TestFilterNoPrefix(t *testing.T) {
 	client := &mockHTTPClient{
 		response: &http.Response{
