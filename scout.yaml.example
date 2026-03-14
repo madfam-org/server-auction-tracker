@@ -18,3 +18,36 @@ database:
   path: "foundry-scout.db"
 
 log_level: "info"
+
+watch:
+  interval: "5m"
+  dedup_window: "1h"
+
+notify:
+  type: "enclii"           # enclii | slack | discord
+  enclii:
+    api_url: "http://switchyard-api.enclii.svc.cluster.local"
+    project_slug: "foundry-scout"
+    webhook_secret: ""
+  slack:
+    webhook_url: ""
+  discord:
+    webhook_url: ""
+
+cluster:
+  cpu_millicores: 12000
+  cpu_requested: 10460
+  ram_gb: 64
+  ram_requested_gb: 25
+  disk_gb: 98
+  disk_used_gb: 77
+  nodes: 2
+
+order:
+  enabled: false
+  robot_url: "https://robot-ws.your-server.de"
+  robot_user: ""
+  robot_password: ""
+  min_score: 90
+  max_price_eur: 80
+  require_approval: true

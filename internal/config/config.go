@@ -11,15 +11,19 @@ type Config struct {
 	Scoring  Scoring  `mapstructure:"scoring"`
 	Database Database `mapstructure:"database"`
 	LogLevel string   `mapstructure:"log_level"`
+	Watch    Watch    `mapstructure:"watch"`
+	Notify   Notify   `mapstructure:"notify"`
+	Cluster  Cluster  `mapstructure:"cluster"`
+	Order    Order    `mapstructure:"order"`
 }
 
 type Filters struct {
-	MinRAMGB          int     `mapstructure:"min_ram_gb"`
-	MinCPUCores       int     `mapstructure:"min_cpu_cores"`
-	MinDrives         int     `mapstructure:"min_drives"`
-	MinDriveSizeGB    int     `mapstructure:"min_drive_size_gb"`
-	MaxPriceEUR       float64 `mapstructure:"max_price_eur"`
-	DatacenterPrefix  string  `mapstructure:"datacenter_prefix"`
+	MinRAMGB         int     `mapstructure:"min_ram_gb"`
+	MinCPUCores      int     `mapstructure:"min_cpu_cores"`
+	MinDrives        int     `mapstructure:"min_drives"`
+	MinDriveSizeGB   int     `mapstructure:"min_drive_size_gb"`
+	MaxPriceEUR      float64 `mapstructure:"max_price_eur"`
+	DatacenterPrefix string  `mapstructure:"datacenter_prefix"`
 }
 
 type Scoring struct {
@@ -33,6 +37,52 @@ type Scoring struct {
 
 type Database struct {
 	Path string `mapstructure:"path"`
+}
+
+type Watch struct {
+	Interval    string `mapstructure:"interval"`
+	DedupWindow string `mapstructure:"dedup_window"`
+}
+
+type Notify struct {
+	Type    string        `mapstructure:"type"`
+	Enclii  EncliiConfig  `mapstructure:"enclii"`
+	Slack   SlackConfig   `mapstructure:"slack"`
+	Discord DiscordConfig `mapstructure:"discord"`
+}
+
+type EncliiConfig struct {
+	APIURL        string `mapstructure:"api_url"`
+	ProjectSlug   string `mapstructure:"project_slug"`
+	WebhookSecret string `mapstructure:"webhook_secret"`
+}
+
+type SlackConfig struct {
+	WebhookURL string `mapstructure:"webhook_url"`
+}
+
+type DiscordConfig struct {
+	WebhookURL string `mapstructure:"webhook_url"`
+}
+
+type Cluster struct {
+	CPUMillicores  int     `mapstructure:"cpu_millicores"`
+	CPURequested   int     `mapstructure:"cpu_requested"`
+	RAMGB          int     `mapstructure:"ram_gb"`
+	RAMRequestedGB int     `mapstructure:"ram_requested_gb"`
+	DiskGB         int     `mapstructure:"disk_gb"`
+	DiskUsedGB     int     `mapstructure:"disk_used_gb"`
+	Nodes          int     `mapstructure:"nodes"`
+}
+
+type Order struct {
+	Enabled         bool    `mapstructure:"enabled"`
+	RobotURL        string  `mapstructure:"robot_url"`
+	RobotUser       string  `mapstructure:"robot_user"`
+	RobotPassword   string  `mapstructure:"robot_password"`
+	MinScore        float64 `mapstructure:"min_score"`
+	MaxPriceEUR     float64 `mapstructure:"max_price_eur"`
+	RequireApproval bool    `mapstructure:"require_approval"`
 }
 
 func Load(path string) (*Config, error) {
@@ -54,6 +104,21 @@ func Load(path string) (*Config, error) {
 
 	v.SetDefault("database.path", "foundry-scout.db")
 	v.SetDefault("log_level", "info")
+
+	v.SetDefault("watch.interval", "5m")
+	v.SetDefault("watch.dedup_window", "1h")
+
+	v.SetDefault("notify.type", "enclii")
+	v.SetDefault("notify.enclii.api_url", "http://switchyard-api.enclii.svc.cluster.local")
+	v.SetDefault("notify.enclii.project_slug", "foundry-scout")
+
+	v.SetDefault("cluster.nodes", 2)
+
+	v.SetDefault("order.enabled", false)
+	v.SetDefault("order.robot_url", "https://robot-ws.your-server.de")
+	v.SetDefault("order.min_score", 90)
+	v.SetDefault("order.max_price_eur", 80)
+	v.SetDefault("order.require_approval", true)
 
 	if path != "" {
 		v.SetConfigFile(path)
