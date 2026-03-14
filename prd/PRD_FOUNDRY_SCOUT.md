@@ -58,11 +58,11 @@ foundry-scout simulate --server-id 12345    # Cluster impact
 
 ## Milestones
 
-- M1: Core Scanner (MVP) — 1-2 sessions
-- M2: Notifications — 1 session
-- M3: Price History — 1 session
-- M4: Cluster Simulation — 1 session
-- M5: Auto-Order — 1 session
+- **M1: Core Scanner (MVP) — implemented** (scan, filter, score, store, print)
+- M2: Notifications — planned
+- **M3: Price History — implemented** (SQLite queries, stats by CPU model)
+- M4: Cluster Simulation — planned
+- M5: Auto-Order — planned
 
 ## Data Source
 

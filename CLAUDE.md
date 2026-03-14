@@ -37,12 +37,12 @@ go vet ./...
 - Use `testify` for test assertions
 - Follow Go standard project layout (`cmd/`, `internal/`)
 - Hard filters and scoring weights defined in config, not hardcoded
-- Data source: `https://www.hetzner.com/_resources/app/jsondata/live_data_sb.json`
+- Data source: `https://www.hetzner.com/_resources/app/data/app/live_data_sb_EUR.json`
 
 ## Milestones
 
 - M1 (implemented): Core Scanner — fetch, filter, score, store, print
-- M3 (implemented): Price History — query by CPU model, show stats
 - M2 (stub): Notifications
+- M3 (implemented): Price History — query by CPU model, show stats
 - M4 (stub): Cluster Simulation
 - M5 (stub): Auto-Order

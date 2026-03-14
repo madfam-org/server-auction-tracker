@@ -65,16 +65,18 @@ database:
 
 ## Scoring Algorithm
 
+Each component is normalized to 0-1 relative to the best server in the current scan, then weighted:
+
 ```
-raw_score = cpu_per_dollar     * 0.30
-          + ram_per_dollar     * 0.25
-          + storage_per_dollar * 0.20
-          + nvme_bonus         * 0.10
-          + cpu_gen_bonus      * 0.10
-          + locality_bonus     * 0.05
+raw_score = normalize(cpu_per_dollar)     * 0.30
+          + normalize(ram_per_dollar)     * 0.25
+          + normalize(storage_per_dollar) * 0.20
+          + nvme_ratio                    * 0.10
+          + cpu_generation_score          * 0.10
+          + datacenter_match              * 0.05
 ```
 
-Final score normalized to 0-100.
+Final score scaled to 0-100.
 
 ## Docker
 
