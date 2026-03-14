@@ -66,6 +66,12 @@ func runHistory(cmd *cobra.Command, args []string) error {
 		fmt.Println()
 	}
 
+	// Load all CPU stats for deal quality comparison
+	allStats, err := db.GetAllCPUStats()
+	if err != nil {
+		return fmt.Errorf("querying CPU stats: %w", err)
+	}
+
 	// History records
 	records, err := db.GetHistory(historyCPU, historyLimit)
 	if err != nil {
@@ -77,15 +83,17 @@ func runHistory(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "DATE\tSERVER\tCPU\tRAM\tPRICE\tSCORE\tDC")
-	fmt.Fprintln(w, "----\t------\t---\t---\t-----\t-----\t--")
+	fmt.Fprintln(w, "DATE\tSERVER\tCPU\tRAM\tPRICE\tDEAL\tSCORE\tDC")
+	fmt.Fprintln(w, "----\t------\t---\t---\t-----\t----\t-----\t--")
 	for _, r := range records {
-		fmt.Fprintf(w, "%s\t%d\t%s\t%dGB\t€%.2f\t%.1f\t%s\n",
+		deal := dealQuality(r, allStats)
+		fmt.Fprintf(w, "%s\t%d\t%s\t%dGB\t€%.2f\t%s\t%.1f\t%s\n",
 			r.ScannedAt.Format("2006-01-02 15:04"),
 			r.ServerID,
 			truncate(r.CPU, 25),
 			r.RAMSize,
 			r.Price,
+			deal,
 			r.Score,
 			r.Datacenter,
 		)
@@ -93,4 +101,18 @@ func runHistory(cmd *cobra.Command, args []string) error {
 	w.Flush()
 	fmt.Printf("\n%d records shown.\n", len(records))
 	return nil
+}
+
+// dealQuality returns a percentage indicator showing how a server's price
+// compares to the average for that CPU model. Negative = below avg (good deal).
+func dealQuality(r store.ScanRecord, allStats map[string]*store.PriceStats) string {
+	stats, ok := allStats[r.CPU]
+	if !ok || stats.AvgPrice == 0 {
+		return "—"
+	}
+	pctDiff := ((r.Price - stats.AvgPrice) / stats.AvgPrice) * 100
+	if pctDiff <= 0 {
+		return fmt.Sprintf("%.1f%%", pctDiff)
+	}
+	return fmt.Sprintf("+%.1f%%", pctDiff)
 }

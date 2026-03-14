@@ -143,6 +143,33 @@ func (s *SQLiteStore) GetStats(cpuModel string) (*PriceStats, error) {
 	return &stats, nil
 }
 
+func (s *SQLiteStore) GetAllCPUStats() (map[string]*PriceStats, error) {
+	rows, err := s.db.Query(`
+		SELECT cpu, COUNT(*), MIN(price), MAX(price), AVG(price), MIN(scanned_at), MAX(scanned_at)
+		FROM scans
+		GROUP BY cpu
+	`)
+	if err != nil {
+		return nil, fmt.Errorf("querying all CPU stats: %w", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]*PriceStats)
+	for rows.Next() {
+		var stats PriceStats
+		var firstSeen, lastSeen string
+		err := rows.Scan(&stats.CPU, &stats.Count, &stats.MinPrice, &stats.MaxPrice,
+			&stats.AvgPrice, &firstSeen, &lastSeen)
+		if err != nil {
+			return nil, fmt.Errorf("scanning CPU stats row: %w", err)
+		}
+		stats.FirstSeen = parseTimestamp(firstSeen)
+		stats.LastSeen = parseTimestamp(lastSeen)
+		result[stats.CPU] = &stats
+	}
+	return result, rows.Err()
+}
+
 // parseTimestamp parses a timestamp string trying the known write format first.
 func parseTimestamp(s string) time.Time {
 	// Our SaveScan writes "2006-01-02 15:04:05" — try this first

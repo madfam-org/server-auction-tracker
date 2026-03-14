@@ -35,5 +35,6 @@ type Store interface {
 	SaveScan(servers []scorer.ScoredServer) error
 	GetHistory(cpuModel string, limit int) ([]ScanRecord, error)
 	GetStats(cpuModel string) (*PriceStats, error)
+	GetAllCPUStats() (map[string]*PriceStats, error)
 	Close() error
 }
