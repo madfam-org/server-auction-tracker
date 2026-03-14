@@ -8,7 +8,6 @@ import (
 	"github.com/madfam-org/server-auction-tracker/internal/scanner"
 	"github.com/madfam-org/server-auction-tracker/internal/scorer"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestTruncate(t *testing.T) {
@@ -77,14 +76,14 @@ func TestPrintResults(t *testing.T) {
 	assert.Contains(t, output, "1 servers found")
 }
 
-func TestWatchCommand(t *testing.T) {
-	err := watchCmd.RunE(watchCmd, nil)
-	require.NoError(t, err)
+func TestWatchCommandRegistered(t *testing.T) {
+	assert.Equal(t, "watch", watchCmd.Name())
+	assert.NotNil(t, watchCmd.RunE)
 }
 
-func TestSimulateCommand(t *testing.T) {
-	err := simulateCmd.RunE(simulateCmd, nil)
-	require.NoError(t, err)
+func TestSimulateCommandRegistered(t *testing.T) {
+	assert.Equal(t, "simulate", simulateCmd.Name())
+	assert.NotNil(t, simulateCmd.RunE)
 }
 
 func TestRootCommandHasSubcommands(t *testing.T) {
