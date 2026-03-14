@@ -1,6 +1,6 @@
 # PRD: Foundry Scout — Hetzner Auction Server Intelligence
 
-> **Status**: Draft — Scaffold In Progress | **Author**: Aldo Ruiz Luna | **Date**: 2026-03-13
+> **Status**: Implemented | **Author**: Aldo Ruiz Luna | **Date**: 2026-03-14
 > **Repo**: `madfam-org/server-auction-tracker`
 > **Binary**: `foundry-scout`
 
@@ -15,9 +15,10 @@ MADFAM operates a 2-node k3s production cluster on Hetzner dedicated servers. Ca
 ## Architecture
 
 - **Language**: Go (single binary, K8s CronJob friendly)
-- **Storage**: SQLite (price history)
-- **Notifications**: Webhook (Slack, Discord, HTTP)
+- **Storage**: SQLite (price history, order audit)
+- **Notifications**: Enclii Switchyard API (primary), Slack/Discord webhooks (fallback)
 - **Order API**: Hetzner Robot API (optional, gated)
+- **Deployment**: K8s CronJob with ArgoCD, Kustomize manifests
 
 ## Core Features
 
@@ -27,7 +28,7 @@ Score auction listings against cluster profile (CPU headroom, storage pressure, 
 
 ### F2: Smart CPU Identification
 
-Parse model strings to extract generation, cores, threads, clock speed.
+Parse model strings to extract generation, cores, threads, clock speed. Supports Ryzen, Intel Core, EPYC, and Xeon families.
 
 ### F3: Price History & Trend Detection
 
@@ -35,34 +36,41 @@ SQLite-backed price stats. Deal quality = % below/above average for similar conf
 
 ### F4: Notifications
 
-Slack/Discord webhooks with score breakdown and cluster impact analysis.
+Enclii Switchyard API (primary) with HMAC-signed lifecycle events. Direct Slack/Discord webhooks for standalone CLI use. Dedup tracker prevents duplicate notifications within configurable window.
 
 ### F5: Auto-Order (Optional, Gated)
 
-Hetzner Robot API with confirmation flow. Safety: min score 90, max price cap, require approval.
+Hetzner Robot API with confirmation flow. Safety gates: order.enabled, min score 90, max price cap, re-fetch confirmation, require approval, audit logging.
+
+### F6: Cluster Simulation
+
+Calculate CPU/RAM/Disk utilization impact of adding a server. Bottleneck relief analysis with health labels.
 
 ## CLI Interface
 
 ```bash
-foundry-scout scan --config scout.yaml      # One-shot scan
-foundry-scout watch --config scout.yaml     # Poll every 5min
-foundry-scout history --cpu "Ryzen 9 3900"  # Price history
-foundry-scout simulate --server-id 12345    # Cluster impact
+foundry-scout scan --config scout.yaml           # One-shot scan
+foundry-scout watch --config scout.yaml          # Poll every 5min
+foundry-scout watch --once --config scout.yaml   # Single iteration (CronJob)
+foundry-scout history --cpu "Ryzen 9 3900"       # Price history + deal %
+foundry-scout simulate --server-id 12345         # Cluster impact
+foundry-scout order --server-id 12345            # Place order (gated)
 ```
 
 ## Deployment Options
 
 - Local CLI
-- K8s CronJob (`*/5 * * * *`)
+- K8s CronJob (`*/5 * * * *`) with PVC-backed SQLite
 - GitHub Actions
+- Docker container
 
 ## Milestones
 
 - **M1: Core Scanner (MVP) — implemented** (scan, filter, score, store, print)
-- M2: Notifications — planned
-- **M3: Price History — implemented** (SQLite queries, stats by CPU model)
-- M4: Cluster Simulation — planned
-- M5: Auto-Order — planned
+- **M2: Notifications — implemented** (enclii/Slack/Discord, watch command, dedup)
+- **M3: Price History — implemented** (SQLite queries, stats by CPU model, deal quality %)
+- **M4: Cluster Simulation — implemented** (CPU/RAM/Disk utilization impact)
+- **M5: Auto-Order — implemented** (Robot API, eligibility gates, audit logging)
 
 ## Data Source
 

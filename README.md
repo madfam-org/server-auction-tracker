@@ -1,6 +1,6 @@
 # server-auction-tracker
 
-Hetzner Server Auction intelligence — automated scoring, price history, and notifications for capacity expansion.
+Hetzner Server Auction intelligence — automated scoring, price history, notifications, and cluster simulation for capacity expansion.
 
 **Binary**: `foundry-scout`
 
@@ -10,7 +10,10 @@ Hetzner Server Auction intelligence — automated scoring, price history, and no
 - Filter servers by RAM, CPU cores, drives, price, and datacenter
 - Score servers using a cluster-aware weighted formula
 - Persist scan results to SQLite for price history and trend analysis
-- Query historical pricing by CPU model with min/max/avg stats
+- Query historical pricing by CPU model with min/max/avg stats and deal quality
+- Watch mode with dedup and notifications (enclii, Slack, Discord)
+- Simulate cluster impact of adding a server
+- Auto-order via Hetzner Robot API with safety gates
 
 ## Install
 
@@ -30,12 +33,20 @@ CGO_ENABLED=1 go build -o foundry-scout ./cmd/foundry-scout
 # One-shot scan — fetch, filter, score, and display matching servers
 foundry-scout scan --config scout.yaml
 
-# View price history for a CPU model
+# View price history for a CPU model (includes deal quality %)
 foundry-scout history --cpu "Ryzen 5 3600" --config scout.yaml
 
-# Planned for future milestones:
-foundry-scout watch      # Poll every N minutes with notifications
-foundry-scout simulate   # Simulate cluster impact of adding a server
+# Watch — poll every 5min with notifications
+foundry-scout watch --config scout.yaml
+
+# Watch — single iteration (for K8s CronJob)
+foundry-scout watch --once --config scout.yaml
+
+# Simulate cluster impact of adding a server
+foundry-scout simulate --server-id 2873962 --config scout.yaml
+
+# Order a server (requires Robot API credentials)
+foundry-scout order --server-id 2873962 --config scout.yaml
 ```
 
 ## Configuration
@@ -61,6 +72,39 @@ scoring:
 
 database:
   path: "foundry-scout.db"
+
+watch:
+  interval: "5m"
+  dedup_window: "1h"
+
+notify:
+  type: "enclii"           # enclii | slack | discord
+  enclii:
+    api_url: "http://switchyard-api.enclii.svc.cluster.local"
+    project_slug: "foundry-scout"
+    webhook_secret: ""
+  slack:
+    webhook_url: ""
+  discord:
+    webhook_url: ""
+
+cluster:
+  cpu_millicores: 12000
+  cpu_requested: 10460
+  ram_gb: 64
+  ram_requested_gb: 25
+  disk_gb: 98
+  disk_used_gb: 77
+  nodes: 2
+
+order:
+  enabled: false
+  robot_url: "https://robot-ws.your-server.de"
+  robot_user: ""
+  robot_password: ""
+  min_score: 90
+  max_price_eur: 80
+  require_approval: true
 ```
 
 ## Scoring Algorithm
@@ -78,12 +122,38 @@ raw_score = normalize(cpu_per_dollar)     * 0.30
 
 Final score scaled to 0-100.
 
-## Docker
+## Deployment
+
+### Docker
 
 ```bash
 docker build -t foundry-scout .
-docker run --rm -v $(pwd)/scout.yaml:/app/scout.yaml foundry-scout scan --config /app/scout.yaml
+docker run --rm -v $(pwd)/scout.yaml:/config/scout.yaml -v scout-data:/data \
+  foundry-scout scan --config /config/scout.yaml
 ```
+
+### Kubernetes (CronJob)
+
+Manifests in `deploy/k8s/`:
+
+```bash
+# Validate manifests
+kubectl apply --dry-run=client -f deploy/k8s/base/
+
+# Deploy with Kustomize
+kubectl apply -k deploy/k8s/production/
+```
+
+- CronJob runs `watch --once` every 5 minutes
+- SQLite persisted via 1Gi PVC (Longhorn)
+- Notifications route through enclii Switchyard API
+- ArgoCD Application in `deploy/argocd/application.yaml`
+
+## Notifications
+
+Notifications route through the **enclii Switchyard API** by default, which fans out to Slack/Discord/Telegram. For standalone CLI use, direct Slack or Discord webhooks are also supported.
+
+Set `notify.type` in config to `enclii`, `slack`, or `discord`.
 
 ## License
 
