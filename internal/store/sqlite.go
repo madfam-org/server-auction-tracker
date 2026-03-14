@@ -39,6 +39,15 @@ func (s *SQLiteStore) Init() error {
 	CREATE INDEX IF NOT EXISTS idx_scans_cpu ON scans(cpu);
 	CREATE INDEX IF NOT EXISTS idx_scans_scanned_at ON scans(scanned_at);
 	CREATE INDEX IF NOT EXISTS idx_scans_server_id ON scans(server_id);
+	CREATE TABLE IF NOT EXISTS order_attempts (
+		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		server_id INTEGER NOT NULL,
+		score REAL NOT NULL,
+		price REAL NOT NULL,
+		success INTEGER NOT NULL DEFAULT 0,
+		message TEXT NOT NULL DEFAULT '',
+		attempted_at DATETIME NOT NULL DEFAULT (datetime('now'))
+	);
 	`
 	_, err := s.db.Exec(schema)
 	if err != nil {
@@ -168,6 +177,21 @@ func (s *SQLiteStore) GetAllCPUStats() (map[string]*PriceStats, error) {
 		result[stats.CPU] = &stats
 	}
 	return result, rows.Err()
+}
+
+func (s *SQLiteStore) SaveOrderAttempt(serverID int, score, price float64, success bool, message string) error {
+	successInt := 0
+	if success {
+		successInt = 1
+	}
+	_, err := s.db.Exec(`
+		INSERT INTO order_attempts (server_id, score, price, success, message, attempted_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+	`, serverID, score, price, successInt, message, time.Now().UTC().Format("2006-01-02 15:04:05"))
+	if err != nil {
+		return fmt.Errorf("saving order attempt: %w", err)
+	}
+	return nil
 }
 
 // parseTimestamp parses a timestamp string trying the known write format first.

@@ -26,6 +26,7 @@ func init() {
 	rootCmd.AddCommand(watchCmd)
 	rootCmd.AddCommand(historyCmd)
 	rootCmd.AddCommand(simulateCmd)
+	rootCmd.AddCommand(orderCmd)
 }
 
 func main() {

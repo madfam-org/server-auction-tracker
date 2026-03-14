@@ -36,5 +36,6 @@ type Store interface {
 	GetHistory(cpuModel string, limit int) ([]ScanRecord, error)
 	GetStats(cpuModel string) (*PriceStats, error)
 	GetAllCPUStats() (map[string]*PriceStats, error)
+	SaveOrderAttempt(serverID int, score, price float64, success bool, message string) error
 	Close() error
 }
