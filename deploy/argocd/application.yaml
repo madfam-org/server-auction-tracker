@@ -1,0 +1,22 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: foundry-scout
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: enclii
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/madfam-org/server-auction-tracker.git
+    targetRevision: main
+    path: deploy/k8s/production
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: foundry-scout
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

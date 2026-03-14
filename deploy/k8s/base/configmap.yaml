@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: foundry-scout-config
+  namespace: foundry-scout
+  labels:
+    app.kubernetes.io/name: foundry-scout
+data:
+  scout.yaml: |
+    filters:
+      min_ram_gb: 64
+      min_cpu_cores: 8
+      min_drives: 2
+      min_drive_size_gb: 512
+      max_price_eur: 90
+      datacenter_prefix: "HEL1"
+
+    scoring:
+      cpu_weight: 0.30
+      ram_weight: 0.25
+      storage_weight: 0.20
+      nvme_weight: 0.10
+      cpu_gen_weight: 0.10
+      locality_weight: 0.05
+
+    database:
+      path: "/data/foundry-scout.db"
+
+    log_level: "info"
+
+    watch:
+      interval: "5m"
+      dedup_window: "1h"
+
+    notify:
+      type: "enclii"
+      enclii:
+        api_url: "http://switchyard-api.enclii.svc.cluster.local"
+        project_slug: "foundry-scout"
+
+    cluster:
+      cpu_millicores: 12000
+      cpu_requested: 10460
+      ram_gb: 64
+      ram_requested_gb: 25
+      disk_gb: 98
+      disk_used_gb: 77
+      nodes: 2
+
+    order:
+      enabled: false

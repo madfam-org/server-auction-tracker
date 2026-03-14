@@ -1,0 +1,65 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: foundry-scout
+  namespace: foundry-scout
+  labels:
+    app.kubernetes.io/name: foundry-scout
+    app.kubernetes.io/component: scanner
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      activeDeadlineSeconds: 300
+      backoffLimit: 2
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: foundry-scout
+        spec:
+          restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65532
+            runAsGroup: 65532
+            fsGroup: 65532
+          containers:
+            - name: foundry-scout
+              image: ghcr.io/madfam-org/foundry-scout:latest
+              args: ["watch", "--once", "--config", "/config/scout.yaml"]
+              resources:
+                requests:
+                  cpu: 50m
+                  memory: 64Mi
+                limits:
+                  cpu: 200m
+                  memory: 128Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: config
+                  mountPath: /config
+                  readOnly: true
+                - name: data
+                  mountPath: /data
+              env:
+                - name: SCOUT_NOTIFY_ENCLII_WEBHOOK_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: foundry-scout-secrets
+                      key: enclii-webhook-secret
+                      optional: true
+          volumes:
+            - name: config
+              configMap:
+                name: foundry-scout-config
+            - name: data
+              persistentVolumeClaim:
+                claimName: foundry-scout-data

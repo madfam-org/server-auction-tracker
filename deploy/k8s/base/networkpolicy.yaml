@@ -1,0 +1,38 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: foundry-scout
+  namespace: foundry-scout
+  labels:
+    app.kubernetes.io/name: foundry-scout
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: foundry-scout
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress: []
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    # Allow HTTPS to Hetzner auction API
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443
+    # Allow HTTP to switchyard-api.enclii.svc.cluster.local
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: enclii
+      ports:
+        - protocol: TCP
+          port: 80
+        - protocol: TCP
+          port: 8080

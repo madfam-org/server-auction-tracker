@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: foundry-scout
+  labels:
+    app.kubernetes.io/name: foundry-scout
+    app.kubernetes.io/part-of: enclii
+    app.kubernetes.io/managed-by: argocd
