@@ -111,10 +111,7 @@ func (s *SQLiteStore) GetHistory(cpuModel string, limit int) ([]ScanRecord, erro
 		if err != nil {
 			return nil, fmt.Errorf("scanning row: %w", err)
 		}
-		r.ScannedAt, _ = time.Parse("2006-01-02T15:04:05Z", scannedAt)
-		if r.ScannedAt.IsZero() {
-			r.ScannedAt, _ = time.Parse("2006-01-02 15:04:05", scannedAt)
-		}
+		r.ScannedAt = parseTimestamp(scannedAt)
 		records = append(records, r)
 	}
 	return records, rows.Err()
@@ -140,16 +137,24 @@ func (s *SQLiteStore) GetStats(cpuModel string) (*PriceStats, error) {
 		return nil, fmt.Errorf("querying stats: %w", err)
 	}
 
-	stats.FirstSeen, _ = time.Parse("2006-01-02T15:04:05Z", firstSeen)
-	if stats.FirstSeen.IsZero() {
-		stats.FirstSeen, _ = time.Parse("2006-01-02 15:04:05", firstSeen)
-	}
-	stats.LastSeen, _ = time.Parse("2006-01-02T15:04:05Z", lastSeen)
-	if stats.LastSeen.IsZero() {
-		stats.LastSeen, _ = time.Parse("2006-01-02 15:04:05", lastSeen)
-	}
+	stats.FirstSeen = parseTimestamp(firstSeen)
+	stats.LastSeen = parseTimestamp(lastSeen)
 
 	return &stats, nil
+}
+
+// parseTimestamp parses a timestamp string trying the known write format first.
+func parseTimestamp(s string) time.Time {
+	// Our SaveScan writes "2006-01-02 15:04:05" — try this first
+	t, err := time.Parse("2006-01-02 15:04:05", s)
+	if err == nil {
+		return t
+	}
+	t, err = time.Parse("2006-01-02T15:04:05Z", s)
+	if err == nil {
+		return t
+	}
+	return time.Time{}
 }
 
 func (s *SQLiteStore) Close() error {

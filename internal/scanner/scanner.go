@@ -66,7 +66,7 @@ type Scanner struct {
 
 func New(client HTTPClient) *Scanner {
 	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+		client = NewRetryClient(nil, 3, 500*time.Millisecond)
 	}
 	return &Scanner{
 		url:    defaultURL,
