@@ -1,3 +1,5 @@
+version: "2"
+
 linters:
   enable:
     - errcheck
@@ -9,11 +11,11 @@ linters:
     - typecheck
     - gocritic
 
-linters-settings:
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
+  settings:
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
 
 issues:
   exclude-dirs:
