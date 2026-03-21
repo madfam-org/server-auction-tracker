@@ -71,7 +71,7 @@ func main() {
 	// Static frontend
 	webSub, err := fs.Sub(webFS, "web")
 	if err != nil {
-		log.Fatalf("embedded web fs: %v", err)
+		log.Fatalf("embedded web fs: %v", err) //nolint:gocritic // defer db.Close above is for graceful shutdown; this path is unreachable
 	}
 	mux.Handle("GET /", http.FileServer(http.FS(webSub)))
 

@@ -70,16 +70,16 @@ func formatTelegramMessage(servers []scorer.ScoredServer) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("<b>Deal Sniper: %d server(s) found</b>\n\n", len(servers)))
 
-	for i, s := range servers {
+	for i := range servers {
 		if i >= 5 {
 			b.WriteString(fmt.Sprintf("\n... and %d more", len(servers)-5))
 			break
 		}
 		b.WriteString(fmt.Sprintf(
 			"<b>#%d</b> — %s\n  EUR %.2f | Score %.1f | %dGB RAM | %s\n\n",
-			s.Server.ID, s.Server.CPU,
-			s.Server.Price, s.Score,
-			s.Server.RAMSize, s.Server.Datacenter,
+			servers[i].Server.ID, servers[i].Server.CPU,
+			servers[i].Server.Price, servers[i].Score,
+			servers[i].Server.RAMSize, servers[i].Server.Datacenter,
 		))
 	}
 	return b.String()

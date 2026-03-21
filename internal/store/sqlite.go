@@ -165,36 +165,36 @@ func (s *SQLiteStore) SaveScan(servers []scorer.ScoredServer) error {
 	defer stmt.Close()
 
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
-	for _, ss := range servers {
-		bdJSON, _ := json.Marshal(ss.Breakdown)
+	for i := range servers {
+		bdJSON, _ := json.Marshal(servers[i].Breakdown)
 		eccInt := 0
-		if ss.Server.IsECC {
+		if servers[i].Server.IsECC {
 			eccInt = 1
 		}
 		fixedInt := 0
-		if ss.Server.FixedPrice {
+		if servers[i].Server.FixedPrice {
 			fixedInt = 1
 		}
 		_, err := stmt.Exec(
-			ss.Server.ID,
-			ss.Server.CPU,
-			ss.Server.RAMSize,
-			ss.Server.TotalStorageTB,
-			ss.Server.NVMeCount,
-			ss.Server.DriveCount,
-			ss.Server.Datacenter,
-			ss.Server.Price,
-			ss.Score,
+			servers[i].Server.ID,
+			servers[i].Server.CPU,
+			servers[i].Server.RAMSize,
+			servers[i].Server.TotalStorageTB,
+			servers[i].Server.NVMeCount,
+			servers[i].Server.DriveCount,
+			servers[i].Server.Datacenter,
+			servers[i].Server.Price,
+			servers[i].Score,
 			now,
 			string(bdJSON),
 			eccInt,
-			ss.Server.SetupPrice,
-			ss.Server.NextReduce,
+			servers[i].Server.SetupPrice,
+			servers[i].Server.NextReduce,
 			fixedInt,
-			ss.Server.Bandwidth,
+			servers[i].Server.Bandwidth,
 		)
 		if err != nil {
-			return fmt.Errorf("inserting scan for server %d: %w", ss.Server.ID, err)
+			return fmt.Errorf("inserting scan for server %d: %w", servers[i].Server.ID, err)
 		}
 	}
 

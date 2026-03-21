@@ -52,14 +52,14 @@ func (w *WebhookNotifier) Notify(ctx context.Context, servers []scorer.ScoredSer
 
 	var topScore float64
 	entries := make([]webhookServerEntry, len(servers))
-	for i, s := range servers {
+	for i := range servers {
 		entries[i] = webhookServerEntry{
-			ID: s.Server.ID, CPU: s.Server.CPU,
-			RAMSize: s.Server.RAMSize, Price: s.Server.Price,
-			Score: s.Score, Datacenter: s.Server.Datacenter,
+			ID: servers[i].Server.ID, CPU: servers[i].Server.CPU,
+			RAMSize: servers[i].Server.RAMSize, Price: servers[i].Server.Price,
+			Score: servers[i].Score, Datacenter: servers[i].Server.Datacenter,
 		}
-		if s.Score > topScore {
-			topScore = s.Score
+		if servers[i].Score > topScore {
+			topScore = servers[i].Score
 		}
 	}
 
