@@ -21,6 +21,8 @@ spec:
             app.kubernetes.io/name: foundry-scout
         spec:
           restartPolicy: OnFailure
+          imagePullSecrets:
+            - name: ghcr-credentials
           securityContext:
             runAsNonRoot: true
             runAsUser: 65532

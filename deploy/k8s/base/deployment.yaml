@@ -19,6 +19,8 @@ spec:
         app.kubernetes.io/component: web
         app.kubernetes.io/part-of: foundry-scout
     spec:
+      imagePullSecrets:
+        - name: ghcr-credentials
       securityContext:
         runAsNonRoot: true
         runAsUser: 65532
