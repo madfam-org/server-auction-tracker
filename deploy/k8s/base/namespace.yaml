@@ -6,3 +6,4 @@ metadata:
     app.kubernetes.io/name: foundry-scout
     app.kubernetes.io/part-of: enclii
     app.kubernetes.io/managed-by: argocd
+    enclii.dev/type: application
