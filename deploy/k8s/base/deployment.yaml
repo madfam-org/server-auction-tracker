@@ -58,6 +58,13 @@ spec:
               port: http
             initialDelaySeconds: 3
             periodSeconds: 10
+          env:
+            - name: DEAL_SNIPER_AUTH_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: foundry-scout-secrets
+                  key: deal-sniper-auth-token
+                  optional: true
           volumeMounts:
             - name: config
               mountPath: /config

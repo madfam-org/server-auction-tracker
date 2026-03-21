@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,12 +11,37 @@ import (
 	"testing"
 
 	"github.com/madfam-org/server-auction-tracker/internal/config"
-	"github.com/madfam-org/server-auction-tracker/internal/scorer"
+	"github.com/madfam-org/server-auction-tracker/internal/order"
 	"github.com/madfam-org/server-auction-tracker/internal/scanner"
+	"github.com/madfam-org/server-auction-tracker/internal/scorer"
 	"github.com/madfam-org/server-auction-tracker/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// mockOrderer implements order.Orderer for testing.
+type mockOrderer struct {
+	checkResult *order.Check
+	orderResult *order.Result
+	orderErr    error
+}
+
+func (m *mockOrderer) CheckEligibility(server scanner.Server, score float64, cfg config.Order) *order.Check {
+	if m.checkResult != nil {
+		return m.checkResult
+	}
+	return order.NewRobotClient(cfg).CheckEligibility(server, score, cfg)
+}
+
+func (m *mockOrderer) Order(_ context.Context, serverID int) (*order.Result, error) {
+	if m.orderErr != nil {
+		return nil, m.orderErr
+	}
+	if m.orderResult != nil {
+		return m.orderResult, nil
+	}
+	return &order.Result{ServerID: serverID, Success: true, Message: "test order placed", TransID: "TX-123"}, nil
+}
 
 func setupTestServer(t *testing.T) (*server, func()) {
 	t.Helper()
@@ -48,9 +75,18 @@ func setupTestServer(t *testing.T) (*server, func()) {
 			Nodes:          2,
 		},
 		Database: config.Database{Path: dbPath},
+		Order: config.Order{
+			Enabled:     true,
+			MinScore:    70.0,
+			MaxPriceEUR: 80.0,
+		},
 	}
 
-	s := &server{store: db, config: cfg}
+	s := &server{
+		store:   db,
+		config:  cfg,
+		orderer: &mockOrderer{},
+	}
 	cleanup := func() { db.Close(); os.RemoveAll(dir) }
 	return s, cleanup
 }
@@ -322,4 +358,239 @@ func TestParseTimestamp(t *testing.T) {
 
 	ts3 := parseTimestamp("garbage")
 	assert.True(t, ts3.IsZero())
+}
+
+// --- Auth middleware tests ---
+
+func TestAuthMiddleware_NoToken(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// No DEAL_SNIPER_AUTH_TOKEN set → 503
+	os.Unsetenv("DEAL_SNIPER_AUTH_TOKEN")
+	handler := s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	})
+
+	req := httptest.NewRequest("POST", "/api/order/check", nil)
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusServiceUnavailable, w.Code)
+}
+
+func TestAuthMiddleware_WrongToken(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "correct-token")
+	handler := s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	})
+
+	req := httptest.NewRequest("POST", "/api/order/check", nil)
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestAuthMiddleware_MissingBearer(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "correct-token")
+	handler := s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	})
+
+	req := httptest.NewRequest("POST", "/api/order/check", nil)
+	// No Authorization header at all
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestAuthMiddleware_CorrectToken(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "correct-token")
+	handler := s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	})
+
+	req := httptest.NewRequest("POST", "/api/order/check", nil)
+	req.Header.Set("Authorization", "Bearer correct-token")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// --- Order check endpoint tests ---
+
+func TestOrderCheckEndpoint(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	seedTestData(t, s.store)
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "test-token")
+
+	body, _ := json.Marshal(orderCheckRequest{ServerID: 12345})
+	req := httptest.NewRequest("POST", "/api/order/check", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	// Wrap with auth middleware like the real server
+	s.authMiddleware(s.handleOrderCheck)(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var resp orderCheckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Equal(t, 12345, resp.ServerID)
+	assert.Equal(t, 87.5, resp.Score)
+	assert.Equal(t, 72.5, resp.Price)
+	assert.True(t, resp.Eligible)
+}
+
+func TestOrderCheckEndpoint_NoAuth(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "test-token")
+
+	body, _ := json.Marshal(orderCheckRequest{ServerID: 12345})
+	req := httptest.NewRequest("POST", "/api/order/check", bytes.NewReader(body))
+	// No Authorization header
+	w := httptest.NewRecorder()
+
+	s.authMiddleware(s.handleOrderCheck)(w, req)
+
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestOrderCheckEndpoint_ServerNotFound(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "test-token")
+
+	body, _ := json.Marshal(orderCheckRequest{ServerID: 99999})
+	req := httptest.NewRequest("POST", "/api/order/check", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	s.authMiddleware(s.handleOrderCheck)(w, req)
+
+	assert.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestOrderCheckEndpoint_Ineligible(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	seedTestData(t, s.store)
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "test-token")
+
+	// Set order disabled so server is ineligible
+	s.config.Order.Enabled = false
+
+	body, _ := json.Marshal(orderCheckRequest{ServerID: 12345})
+	req := httptest.NewRequest("POST", "/api/order/check", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	s.authMiddleware(s.handleOrderCheck)(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp orderCheckResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.False(t, resp.Eligible)
+	assert.NotEmpty(t, resp.Reasons)
+	assert.Contains(t, resp.Reasons[0], "disabled")
+}
+
+// --- Order confirm endpoint tests ---
+
+func TestOrderConfirmEndpoint(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	seedTestData(t, s.store)
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "test-token")
+
+	body, _ := json.Marshal(orderCheckRequest{ServerID: 12345})
+	req := httptest.NewRequest("POST", "/api/order/confirm", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	s.authMiddleware(s.handleOrderConfirm)(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp orderConfirmResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.True(t, resp.Success)
+	assert.Equal(t, "TX-123", resp.TransactionID)
+	assert.Contains(t, resp.Message, "test order placed")
+}
+
+func TestOrderConfirmEndpoint_Ineligible(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	seedTestData(t, s.store)
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "test-token")
+
+	// Make server ineligible by disabling orders
+	s.config.Order.Enabled = false
+
+	body, _ := json.Marshal(orderCheckRequest{ServerID: 12345})
+	req := httptest.NewRequest("POST", "/api/order/confirm", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer test-token")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+
+	s.authMiddleware(s.handleOrderConfirm)(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var resp orderConfirmResponse
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.False(t, resp.Success)
+	assert.Contains(t, resp.Message, "ineligible")
+}
+
+// --- Breakdown in scan records ---
+
+func TestBreakdownInLatest(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	seedTestData(t, s.store)
+
+	req := httptest.NewRequest("GET", "/api/latest", nil)
+	w := httptest.NewRecorder()
+	s.handleLatest(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+	var records []store.ScanRecord
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &records))
+	require.Len(t, records, 2)
+
+	// Check that breakdown JSON is populated
+	assert.NotEmpty(t, records[0].BreakdownJSON)
+	assert.NotEqual(t, "{}", records[0].BreakdownJSON)
+
+	var bd scorer.Breakdown
+	require.NoError(t, json.Unmarshal([]byte(records[0].BreakdownJSON), &bd))
+	// The first record (by scanned_at desc) could be either server —
+	// just verify the breakdown has non-zero values
+	assert.True(t, bd.CPUPerDollar > 0 || bd.RAMPerDollar > 0)
 }

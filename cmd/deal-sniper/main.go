@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/madfam-org/server-auction-tracker/internal/config"
+	"github.com/madfam-org/server-auction-tracker/internal/order"
 	"github.com/madfam-org/server-auction-tracker/internal/simulate"
 	"github.com/madfam-org/server-auction-tracker/internal/store"
 	log "github.com/sirupsen/logrus"
@@ -41,8 +42,9 @@ func main() {
 	}
 
 	s := &server{
-		store:  db,
-		config: cfg,
+		store:   db,
+		config:  cfg,
+		orderer: order.NewRobotClient(cfg.Order),
 	}
 
 	mux := http.NewServeMux()
@@ -56,6 +58,8 @@ func main() {
 	mux.HandleFunc("GET /api/simulate/{server_id}", s.handleSimulate)
 	mux.HandleFunc("GET /api/orders", s.handleOrders)
 	mux.HandleFunc("GET /api/config", s.handleConfig)
+	mux.HandleFunc("POST /api/order/check", s.authMiddleware(s.handleOrderCheck))
+	mux.HandleFunc("POST /api/order/confirm", s.authMiddleware(s.handleOrderConfirm))
 
 	// Static frontend
 	webSub, err := fs.Sub(webFS, "web")
@@ -80,8 +84,9 @@ func main() {
 }
 
 type server struct {
-	store  store.Store
-	config *config.Config
+	store   store.Store
+	config  *config.Config
+	orderer order.Orderer
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {

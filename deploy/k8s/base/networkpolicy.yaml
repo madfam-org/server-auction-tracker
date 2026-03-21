@@ -68,3 +68,8 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+    # Allow HTTPS to Hetzner Robot API (for order placement)
+    - to: []
+      ports:
+        - protocol: TCP
+          port: 443

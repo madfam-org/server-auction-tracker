@@ -53,6 +53,8 @@ go vet ./...
 | GET | `/api/simulate/{server_id}` | Cluster impact analysis |
 | GET | `/api/orders` | Order audit log |
 | GET | `/api/config` | Current config (secrets redacted) |
+| POST | `/api/order/check` | Eligibility pre-check (requires Bearer auth) |
+| POST | `/api/order/confirm` | Place order via Robot API (requires Bearer auth) |
 | GET | `/` | Dashboard (embedded static files) |
 
 ## Deployment
@@ -82,3 +84,4 @@ go vet ./...
 - M4 (implemented): Cluster Simulation — CPU/RAM/Disk impact analysis
 - M5 (implemented): Auto-Order — Robot API with safety gates, audit logging
 - M6 (implemented): Web Dashboard — Deal Sniper UI at sniper.madfam.io
+- M7 (implemented): Buy Now Flow — Two-step order (check + confirm) with Bearer auth, score breakdown display

@@ -2,6 +2,7 @@ package store
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -53,6 +54,32 @@ func (s *SQLiteStore) Init() error {
 	if err != nil {
 		return fmt.Errorf("creating schema: %w", err)
 	}
+
+	// Migration: add breakdown column if it doesn't exist
+	var hasBreakdown bool
+	rows, err := s.db.Query("PRAGMA table_info(scans)")
+	if err != nil {
+		return fmt.Errorf("checking scans columns: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var cid int
+		var name, colType string
+		var notNull, pk int
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &colType, &notNull, &dflt, &pk); err != nil {
+			return fmt.Errorf("scanning column info: %w", err)
+		}
+		if name == "breakdown" {
+			hasBreakdown = true
+		}
+	}
+	if !hasBreakdown {
+		if _, err := s.db.Exec("ALTER TABLE scans ADD COLUMN breakdown TEXT NOT NULL DEFAULT '{}'"); err != nil {
+			return fmt.Errorf("adding breakdown column: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -64,8 +91,8 @@ func (s *SQLiteStore) SaveScan(servers []scorer.ScoredServer) error {
 	defer tx.Rollback() //nolint:errcheck
 
 	stmt, err := tx.Prepare(`
-		INSERT INTO scans (server_id, cpu, ram_size, total_storage_tb, nvme_count, drive_count, datacenter, price, score, scanned_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO scans (server_id, cpu, ram_size, total_storage_tb, nvme_count, drive_count, datacenter, price, score, scanned_at, breakdown)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`)
 	if err != nil {
 		return fmt.Errorf("preparing statement: %w", err)
@@ -74,6 +101,7 @@ func (s *SQLiteStore) SaveScan(servers []scorer.ScoredServer) error {
 
 	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	for _, ss := range servers {
+		bdJSON, _ := json.Marshal(ss.Breakdown)
 		_, err := stmt.Exec(
 			ss.Server.ID,
 			ss.Server.CPU,
@@ -85,6 +113,7 @@ func (s *SQLiteStore) SaveScan(servers []scorer.ScoredServer) error {
 			ss.Server.Price,
 			ss.Score,
 			now,
+			string(bdJSON),
 		)
 		if err != nil {
 			return fmt.Errorf("inserting scan for server %d: %w", ss.Server.ID, err)
@@ -100,7 +129,7 @@ func (s *SQLiteStore) GetHistory(cpuModel string, limit int) ([]ScanRecord, erro
 	}
 
 	rows, err := s.db.Query(`
-		SELECT id, server_id, cpu, ram_size, total_storage_tb, nvme_count, drive_count, datacenter, price, score, scanned_at
+		SELECT id, server_id, cpu, ram_size, total_storage_tb, nvme_count, drive_count, datacenter, price, score, scanned_at, breakdown
 		FROM scans
 		WHERE cpu LIKE ?
 		ORDER BY scanned_at DESC
@@ -116,7 +145,7 @@ func (s *SQLiteStore) GetHistory(cpuModel string, limit int) ([]ScanRecord, erro
 		var r ScanRecord
 		var scannedAt string
 		err := rows.Scan(&r.ID, &r.ServerID, &r.CPU, &r.RAMSize, &r.TotalStorageTB,
-			&r.NVMeCount, &r.DriveCount, &r.Datacenter, &r.Price, &r.Score, &scannedAt)
+			&r.NVMeCount, &r.DriveCount, &r.Datacenter, &r.Price, &r.Score, &scannedAt, &r.BreakdownJSON)
 		if err != nil {
 			return nil, fmt.Errorf("scanning row: %w", err)
 		}

@@ -18,6 +18,7 @@ type ScanRecord struct {
 	Price          float64
 	Score          float64
 	ScannedAt      time.Time
+	BreakdownJSON  string // JSON-encoded scorer.Breakdown
 }
 
 type PriceStats struct {

@@ -10,7 +10,7 @@ Hetzner Server Auction intelligence — automated scoring, price history, notifi
 - Filter servers by RAM, CPU cores, drives, price, and datacenter
 - Score servers using a cluster-aware weighted formula
 - Persist scan results to SQLite for price history and trend analysis
-- **Web dashboard** with live deals, price charts, cluster simulator, and order audit log
+- **Web dashboard** with live deals, price charts, cluster simulator, order audit log, and Buy Now flow
 - Query historical pricing by CPU model with min/max/avg stats and deal quality
 - Watch mode with dedup and notifications (enclii, Slack, Discord)
 - Simulate cluster impact of adding a server
@@ -24,6 +24,7 @@ The Deal Sniper web UI is served at port 4205 and provides:
 - **Price History** — Line charts showing price/score over time per CPU model.
 - **Order Log** — Audit trail of all order attempts.
 - **Config** — Read-only view of current filters, scoring weights, and cluster profile.
+- **Buy Now** — Two-step order flow: check eligibility, then confirm. Requires Bearer token auth (stored in session, cleared on tab close). Score breakdown visualization in the simulation modal.
 
 ```bash
 # Run locally

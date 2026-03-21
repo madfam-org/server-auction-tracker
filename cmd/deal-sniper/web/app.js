@@ -4,6 +4,7 @@
 const API = '';
 let refreshTimer = null;
 let priceChart = null;
+let currentSimServerID = null;
 
 // --- Navigation ---
 
@@ -20,10 +21,74 @@ document.querySelectorAll('nav button').forEach(btn => {
     });
 });
 
+// --- Auth ---
+
+function getAuthToken() {
+    return sessionStorage.getItem('ds_auth_token') || '';
+}
+
+function showAuthModal() {
+    document.getElementById('auth-modal').classList.add('active');
+    document.getElementById('auth-token-input').focus();
+}
+
+function closeAuthModal() {
+    document.getElementById('auth-modal').classList.remove('active');
+}
+
+function saveAuthToken() {
+    const token = document.getElementById('auth-token-input').value.trim();
+    if (token) {
+        sessionStorage.setItem('ds_auth_token', token);
+        updateAuthUI();
+        showToast('Authenticated', 'success');
+    }
+    document.getElementById('auth-token-input').value = '';
+    closeAuthModal();
+}
+
+function updateAuthUI() {
+    const btn = document.getElementById('auth-btn');
+    if (getAuthToken()) {
+        btn.classList.add('authenticated');
+        btn.title = 'Authenticated (click to re-authenticate)';
+    } else {
+        btn.classList.remove('authenticated');
+        btn.title = 'Authenticate for orders';
+    }
+}
+
+// Init auth UI
+updateAuthUI();
+
 // --- Data Fetching ---
 
 async function fetchJSON(path) {
     const resp = await fetch(API + path);
+    if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+    return resp.json();
+}
+
+async function fetchJSONAuth(path, options = {}) {
+    const token = getAuthToken();
+    if (!token) {
+        showAuthModal();
+        throw new Error('Not authenticated');
+    }
+    const resp = await fetch(API + path, {
+        ...options,
+        headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + token,
+            ...(options.headers || {}),
+        },
+    });
+    if (resp.status === 401) {
+        sessionStorage.removeItem('ds_auth_token');
+        updateAuthUI();
+        showToast('Auth token invalid — please re-authenticate', 'error');
+        throw new Error('Unauthorized');
+    }
     if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
     return resp.json();
 }
@@ -250,12 +315,17 @@ function renderCPUStats(stats) {
 // --- Simulation Modal ---
 
 async function openSimModal(serverID) {
+    currentSimServerID = serverID;
     const modal = document.getElementById('sim-modal');
     const info = document.getElementById('sim-server-info');
     const grid = document.getElementById('sim-grid');
+    const breakdown = document.getElementById('sim-breakdown');
+    const orderSection = document.getElementById('sim-order-section');
 
     info.innerHTML = '<div class="spinner"></div> Loading simulation...';
     grid.innerHTML = '';
+    breakdown.innerHTML = '';
+    orderSection.innerHTML = '';
     modal.classList.add('active');
 
     try {
@@ -275,9 +345,63 @@ async function openSimModal(serverID) {
             + renderSimMetric('RAM Utilization', r.RAMBefore, r.RAMAfter, data.health_before.ram, data.health_after.ram)
             + renderSimMetric('Disk Utilization', r.DiskBefore, r.DiskAfter, data.health_before.disk, data.health_after.disk)
             + renderSimMetric('Monthly Cost', r.MonthlyCostBefore, r.MonthlyCostAfter, null, null, true);
+
+        // Try to show score breakdown from latest scan data
+        try {
+            const latest = await fetchJSON('/api/latest?limit=500');
+            const serverData = (latest || []).find(s => s.ServerID === serverID);
+            if (serverData && serverData.BreakdownJSON && serverData.BreakdownJSON !== '{}') {
+                const bd = JSON.parse(serverData.BreakdownJSON);
+                breakdown.innerHTML = renderBreakdown(bd);
+            }
+        } catch (e) {
+            // Non-critical, skip breakdown display
+        }
+
+        // Show snipe button
+        orderSection.innerHTML = `
+            <button class="snipe-btn" onclick="startOrderCheck(${serverID})">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                    <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+                </svg>
+                Snipe This Server
+            </button>
+        `;
     } catch (err) {
         info.innerHTML = `<div style="color: var(--red);">Simulation failed: ${escapeHtml(err.message)}</div>`;
     }
+}
+
+function renderBreakdown(bd) {
+    const metrics = [
+        { label: 'CPU/$', value: bd.CPUPerDollar || 0 },
+        { label: 'RAM/$', value: bd.RAMPerDollar || 0 },
+        { label: 'Stor/$', value: bd.StoragePerDollar || 0 },
+        { label: 'NVMe', value: bd.NVMeBonus || 0 },
+        { label: 'CPU Gen', value: bd.CPUGenBonus || 0 },
+        { label: 'DC', value: bd.LocalityBonus || 0 },
+    ];
+
+    const bars = metrics.map(m => {
+        const pct = Math.round(m.value * 100);
+        const color = pct >= 80 ? 'var(--green)' : pct >= 50 ? 'var(--yellow)' : 'var(--text-muted)';
+        return `
+            <div class="breakdown-row">
+                <span class="breakdown-label">${m.label}</span>
+                <div class="breakdown-bar-track">
+                    <div class="breakdown-bar-fill" style="width: ${pct}%; background: ${color};"></div>
+                </div>
+                <span class="breakdown-value">${m.value.toFixed(2)}</span>
+            </div>
+        `;
+    }).join('');
+
+    return `
+        <div class="breakdown-card">
+            <div class="breakdown-title">Score Breakdown</div>
+            ${bars}
+        </div>
+    `;
 }
 
 function renderSimMetric(label, before, after, healthBefore, healthAfter, isCost) {
@@ -301,17 +425,145 @@ function renderSimMetric(label, before, after, healthBefore, healthAfter, isCost
 
 function closeSimModal() {
     document.getElementById('sim-modal').classList.remove('active');
+    currentSimServerID = null;
 }
 
 // Close modal on overlay click
 document.getElementById('sim-modal').addEventListener('click', function(e) {
     if (e.target === this) closeSimModal();
 });
+document.getElementById('auth-modal').addEventListener('click', function(e) {
+    if (e.target === this) closeAuthModal();
+});
 
 // Close modal on Escape
 document.addEventListener('keydown', e => {
-    if (e.key === 'Escape') closeSimModal();
+    if (e.key === 'Escape') {
+        closeSimModal();
+        closeAuthModal();
+    }
 });
+
+// Enter key in auth input
+document.getElementById('auth-token-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') saveAuthToken();
+});
+
+// --- Order Flow ---
+
+async function startOrderCheck(serverID) {
+    if (!getAuthToken()) {
+        showAuthModal();
+        return;
+    }
+
+    const orderSection = document.getElementById('sim-order-section');
+    orderSection.innerHTML = '<div class="spinner"></div> Checking eligibility...';
+
+    try {
+        const result = await fetchJSONAuth('/api/order/check', {
+            method: 'POST',
+            body: JSON.stringify({ server_id: serverID }),
+        });
+
+        if (!result.eligible) {
+            orderSection.innerHTML = `
+                <div class="order-result order-ineligible">
+                    <strong>Ineligible</strong>
+                    <ul>${(result.reasons || []).map(r => `<li>${escapeHtml(r)}</li>`).join('')}</ul>
+                </div>
+                <button class="snipe-btn" disabled style="opacity: 0.4; cursor: not-allowed;">
+                    Snipe This Server
+                </button>
+            `;
+        } else {
+            orderSection.innerHTML = `
+                <div class="order-result order-eligible">
+                    <strong>Eligible</strong> — Server #${result.server_id} at &euro;${result.price.toFixed(2)}/mo, score ${result.score.toFixed(1)}
+                </div>
+                <div class="order-confirm">
+                    <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">
+                        This will place a real order with the Hetzner Robot API. The server will be provisioned and billed to your account.
+                    </p>
+                    <button class="snipe-btn snipe-confirm" onclick="confirmOrder(${serverID})">
+                        Confirm Order — &euro;${result.price.toFixed(2)}/mo
+                    </button>
+                    <button class="snipe-btn snipe-cancel" onclick="cancelOrder()">Cancel</button>
+                </div>
+            `;
+        }
+    } catch (err) {
+        if (err.message === 'Not authenticated' || err.message === 'Unauthorized') return;
+        orderSection.innerHTML = `
+            <div class="order-result order-error">Check failed: ${escapeHtml(err.message)}</div>
+            <button class="snipe-btn" onclick="startOrderCheck(${serverID})">Retry</button>
+        `;
+    }
+}
+
+async function confirmOrder(serverID) {
+    const orderSection = document.getElementById('sim-order-section');
+    orderSection.innerHTML = '<div class="spinner"></div> Placing order...';
+
+    try {
+        const result = await fetchJSONAuth('/api/order/confirm', {
+            method: 'POST',
+            body: JSON.stringify({ server_id: serverID }),
+        });
+
+        if (result.success) {
+            showToast(`Order placed! ${result.message}`, 'success');
+            orderSection.innerHTML = `
+                <div class="order-result order-success">
+                    <strong>Order Placed</strong><br>${escapeHtml(result.message)}
+                    ${result.transaction_id ? `<br>Transaction: <code>${escapeHtml(result.transaction_id)}</code>` : ''}
+                </div>
+            `;
+        } else {
+            showToast(`Order failed: ${result.message}`, 'error');
+            orderSection.innerHTML = `
+                <div class="order-result order-error">
+                    <strong>Order Failed</strong><br>${escapeHtml(result.message)}
+                </div>
+                <button class="snipe-btn" onclick="startOrderCheck(${serverID})">Retry Check</button>
+            `;
+        }
+
+        // Refresh orders panel
+        loadOrders();
+    } catch (err) {
+        if (err.message === 'Not authenticated' || err.message === 'Unauthorized') return;
+        showToast(`Order error: ${err.message}`, 'error');
+        orderSection.innerHTML = `
+            <div class="order-result order-error">Error: ${escapeHtml(err.message)}</div>
+            <button class="snipe-btn" onclick="startOrderCheck(${serverID})">Retry</button>
+        `;
+    }
+}
+
+function cancelOrder() {
+    const serverID = currentSimServerID;
+    document.getElementById('sim-order-section').innerHTML = `
+        <button class="snipe-btn" onclick="startOrderCheck(${serverID})">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                <circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>
+            </svg>
+            Snipe This Server
+        </button>
+    `;
+}
+
+// --- Toast Notifications ---
+
+function showToast(message, type) {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    container.appendChild(toast);
+    setTimeout(() => { toast.classList.add('toast-fade'); }, 3000);
+    setTimeout(() => { toast.remove(); }, 3500);
+}
 
 // --- Orders ---
 
