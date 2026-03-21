@@ -208,6 +208,72 @@ func (s *SQLiteStore) GetAllCPUStats() (map[string]*PriceStats, error) {
 	return result, rows.Err()
 }
 
+func (s *SQLiteStore) GetByServerID(serverID int) (*ScanRecord, error) {
+	row := s.db.QueryRow(`
+		SELECT id, server_id, cpu, ram_size, total_storage_tb, nvme_count, drive_count, datacenter, price, score, scanned_at, breakdown
+		FROM scans
+		WHERE server_id = ?
+		ORDER BY scanned_at DESC
+		LIMIT 1
+	`, serverID)
+
+	var r ScanRecord
+	var scannedAt string
+	err := row.Scan(&r.ID, &r.ServerID, &r.CPU, &r.RAMSize, &r.TotalStorageTB,
+		&r.NVMeCount, &r.DriveCount, &r.Datacenter, &r.Price, &r.Score, &scannedAt, &r.BreakdownJSON)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("querying server %d: %w", serverID, err)
+	}
+	r.ScannedAt = parseTimestamp(scannedAt)
+	return &r, nil
+}
+
+func (s *SQLiteStore) GetOrderAttempts(limit int) ([]OrderAttempt, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	rows, err := s.db.Query(`
+		SELECT id, server_id, score, price, success, message, attempted_at
+		FROM order_attempts
+		ORDER BY attempted_at DESC
+		LIMIT ?
+	`, limit)
+	if err != nil {
+		return nil, fmt.Errorf("querying order attempts: %w", err)
+	}
+	defer rows.Close()
+
+	var orders []OrderAttempt
+	for rows.Next() {
+		var o OrderAttempt
+		var successInt int
+		var attemptedAt string
+		if err := rows.Scan(&o.ID, &o.ServerID, &o.Score, &o.Price, &successInt, &o.Message, &attemptedAt); err != nil {
+			return nil, fmt.Errorf("scanning order row: %w", err)
+		}
+		o.Success = successInt == 1
+		o.AttemptedAt = parseTimestamp(attemptedAt)
+		orders = append(orders, o)
+	}
+	return orders, rows.Err()
+}
+
+func (s *SQLiteStore) PruneOldScans(retentionDays int) (int64, error) {
+	if retentionDays <= 0 {
+		return 0, nil
+	}
+	result, err := s.db.Exec(`
+		DELETE FROM scans WHERE scanned_at < datetime('now', ? || ' days')
+	`, -retentionDays)
+	if err != nil {
+		return 0, fmt.Errorf("pruning old scans: %w", err)
+	}
+	return result.RowsAffected()
+}
+
 func (s *SQLiteStore) SaveOrderAttempt(serverID int, score, price float64, success bool, message string) error {
 	successInt := 0
 	if success {
@@ -235,11 +301,6 @@ func parseTimestamp(s string) time.Time {
 		return t
 	}
 	return time.Time{}
-}
-
-// DB returns the underlying *sql.DB for direct queries.
-func (s *SQLiteStore) DB() *sql.DB {
-	return s.db
 }
 
 func (s *SQLiteStore) Close() error {

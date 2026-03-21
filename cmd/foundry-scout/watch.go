@@ -109,7 +109,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 }
 
-func watchIteration(ctx context.Context, sc *scanner.Scanner, db *store.SQLiteStore, cfg *config.Config, notifier notify.Notifier, dedup *notify.DedupTracker) error {
+func watchIteration(ctx context.Context, sc *scanner.Scanner, db store.Store, cfg *config.Config, notifier notify.Notifier, dedup *notify.DedupTracker) error {
 	// Fetch
 	servers, err := sc.Fetch()
 	if err != nil {
@@ -142,6 +142,16 @@ func watchIteration(ctx context.Context, sc *scanner.Scanner, db *store.SQLiteSt
 		log.WithError(err).Warn("Failed to save scan results")
 	} else {
 		log.WithField("count", len(scored)).Info("Saved scan results")
+	}
+
+	// Prune old scan data
+	if cfg.Database.RetentionDays > 0 {
+		pruned, err := db.PruneOldScans(cfg.Database.RetentionDays)
+		if err != nil {
+			log.WithError(err).Warn("Failed to prune old scans")
+		} else if pruned > 0 {
+			log.WithField("pruned", pruned).Info("Pruned old scan records")
+		}
 	}
 
 	return nil

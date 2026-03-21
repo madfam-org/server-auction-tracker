@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/madfam-org/server-auction-tracker/internal/scanner"
 	"github.com/madfam-org/server-auction-tracker/internal/scorer"
@@ -43,48 +42,6 @@ func estimateCoresFromRAM(ramGB int) int {
 	default:
 		return 4
 	}
-}
-
-// getOrderAttempts queries the order_attempts table directly.
-// The Store interface doesn't expose a read method, so we access the underlying DB.
-func getOrderAttempts(s *store.SQLiteStore) ([]orderAttempt, error) {
-	rows, err := s.DB().Query(`
-		SELECT id, server_id, score, price, success, message, attempted_at
-		FROM order_attempts
-		ORDER BY attempted_at DESC
-		LIMIT 100
-	`)
-	if err != nil {
-		return nil, fmt.Errorf("querying order attempts: %w", err)
-	}
-	defer rows.Close()
-
-	var orders []orderAttempt
-	for rows.Next() {
-		var o orderAttempt
-		var successInt int
-		var attemptedAt string
-		if err := rows.Scan(&o.ID, &o.ServerID, &o.Score, &o.Price, &successInt, &o.Message, &attemptedAt); err != nil {
-			return nil, fmt.Errorf("scanning order row: %w", err)
-		}
-		o.Success = successInt == 1
-		o.AttemptedAt = parseTimestamp(attemptedAt)
-		orders = append(orders, o)
-	}
-	return orders, rows.Err()
-}
-
-// parseTimestamp parses timestamps in the formats used by the store.
-func parseTimestamp(s string) time.Time {
-	t, err := time.Parse("2006-01-02 15:04:05", s)
-	if err == nil {
-		return t
-	}
-	t, err = time.Parse("2006-01-02T15:04:05Z", s)
-	if err == nil {
-		return t
-	}
-	return time.Time{}
 }
 
 // --- Auth middleware ---
@@ -217,22 +174,18 @@ func (s *server) handleOrderConfirm(w http.ResponseWriter, r *http.Request) {
 // fetchAndScoreServer looks up a server from the most recent scan data,
 // converts it, and scores it using the current config.
 func (s *server) fetchAndScoreServer(serverID int) (*scanner.Server, float64, *scorer.Breakdown, error) {
-	records, err := s.store.GetHistory("", 500)
+	rec, err := s.store.GetByServerID(serverID)
 	if err != nil {
 		return nil, 0, nil, fmt.Errorf("failed to query scan data: %w", err)
 	}
-
-	for _, rec := range records {
-		if rec.ServerID == serverID {
-			srv := scanRecordToServer(rec)
-			// Use the stored score and breakdown
-			var bd scorer.Breakdown
-			if rec.BreakdownJSON != "" && rec.BreakdownJSON != "{}" {
-				json.Unmarshal([]byte(rec.BreakdownJSON), &bd) //nolint:errcheck
-			}
-			return &srv, rec.Score, &bd, nil
-		}
+	if rec == nil {
+		return nil, 0, nil, fmt.Errorf("server %d not found in recent scans", serverID)
 	}
 
-	return nil, 0, nil, fmt.Errorf("server %d not found in recent scans", serverID)
+	srv := scanRecordToServer(*rec)
+	var bd scorer.Breakdown
+	if rec.BreakdownJSON != "" && rec.BreakdownJSON != "{}" {
+		json.Unmarshal([]byte(rec.BreakdownJSON), &bd) //nolint:errcheck
+	}
+	return &srv, rec.Score, &bd, nil
 }

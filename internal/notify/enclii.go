@@ -3,12 +3,10 @@ package notify
 import (
 	"bytes"
 	"context"
-	"crypto/hmac"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/madfam-org/server-auction-tracker/internal/config"
@@ -91,9 +89,13 @@ func (n *EncliiNotifier) Notify(ctx context.Context, servers []scorer.ScoredServ
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("User-Agent", "foundry-scout/1.0")
 
-	if n.cfg.WebhookSecret != "" {
-		sig := computeHMAC(body, []byte(n.cfg.WebhookSecret))
-		req.Header.Set("X-Webhook-Signature", sig)
+	// Use Bearer token auth — env var takes precedence over config
+	token := os.Getenv("SCOUT_NOTIFY_ENCLII_CALLBACK_TOKEN")
+	if token == "" {
+		token = n.cfg.WebhookSecret
+	}
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 
 	resp, err := n.client.Do(req)
@@ -106,10 +108,4 @@ func (n *EncliiNotifier) Notify(ctx context.Context, servers []scorer.ScoredServ
 		return fmt.Errorf("enclii returned status %d", resp.StatusCode)
 	}
 	return nil
-}
-
-func computeHMAC(message, key []byte) string {
-	mac := hmac.New(sha256.New, key)
-	mac.Write(message)
-	return "sha256=" + hex.EncodeToString(mac.Sum(nil))
 }

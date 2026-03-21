@@ -298,7 +298,7 @@ func TestOrdersEndpoint(t *testing.T) {
 	s.handleOrders(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var orders []orderAttempt
+	var orders []store.OrderAttempt
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &orders))
 	assert.Len(t, orders, 1)
 	assert.Equal(t, 12345, orders[0].ServerID)
@@ -346,18 +346,6 @@ func TestQueryInt(t *testing.T) {
 		req := httptest.NewRequest("GET", tt.url, nil)
 		assert.Equal(t, tt.expected, queryInt(req, tt.key, tt.def))
 	}
-}
-
-func TestParseTimestamp(t *testing.T) {
-	ts := parseTimestamp("2026-03-20 14:30:00")
-	assert.Equal(t, 2026, ts.Year())
-	assert.Equal(t, 14, ts.Hour())
-
-	ts2 := parseTimestamp("2026-03-20T14:30:00Z")
-	assert.Equal(t, 2026, ts2.Year())
-
-	ts3 := parseTimestamp("garbage")
-	assert.True(t, ts3.IsZero())
 }
 
 // --- Auth middleware tests ---

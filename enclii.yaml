@@ -1,0 +1,27 @@
+apiVersion: enclii.dev/v1
+kind: Service
+metadata:
+  name: deal-sniper
+  project: foundry-scout
+spec:
+  build:
+    type: dockerfile
+  runtime:
+    port: 4205
+    replicas: 1
+    healthCheck: /api/health
+  domains:
+    - name: sniper.madfam.io
+      environment: production
+  network:
+    services:
+      - name: deal-sniper-web
+        label: app.kubernetes.io/name
+        port: 4205
+        ingress: [cloudflare-tunnel]
+        egress: [dns, https]
+  status:
+    entries:
+      - name: sniper.madfam.io
+        url: https://sniper.madfam.io/api/health
+        group: Foundry Scout

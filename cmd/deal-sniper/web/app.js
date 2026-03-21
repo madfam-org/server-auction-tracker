@@ -2,9 +2,53 @@
 'use strict';
 
 const API = '';
+const REFRESH_INTERVAL = 60; // seconds
 let refreshTimer = null;
+let countdownTimer = null;
+let countdownRemaining = REFRESH_INTERVAL;
 let priceChart = null;
 let currentSimServerID = null;
+
+// Module-level data store for sorting/filtering without re-fetch
+let rawRecords = [];
+let previousServerIDs = new Set();
+
+// --- Sort state ---
+const sortState = { key: 'Score', dir: 'desc' };
+
+// --- Filter state (persisted to localStorage) ---
+const filterState = loadFilterState();
+
+function loadFilterState() {
+    try {
+        const saved = localStorage.getItem('ds_filters');
+        return saved ? JSON.parse(saved) : { search: '', dc: '', priceMin: '', priceMax: '', nvmeOnly: false };
+    } catch { return { search: '', dc: '', priceMin: '', priceMax: '', nvmeOnly: false }; }
+}
+
+function saveFilterState() {
+    localStorage.setItem('ds_filters', JSON.stringify(filterState));
+}
+
+// --- Theme ---
+
+function initTheme() {
+    const saved = localStorage.getItem('ds_theme');
+    if (saved) {
+        document.documentElement.setAttribute('data-theme', saved);
+    }
+}
+
+function toggleTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    const next = current === 'light' ? 'dark' : 'light';
+    document.documentElement.setAttribute('data-theme', next);
+    localStorage.setItem('ds_theme', next);
+    // Update chart colors if active
+    if (priceChart) updateChartColors();
+}
+
+initTheme();
 
 // --- Navigation ---
 
@@ -58,7 +102,6 @@ function updateAuthUI() {
     }
 }
 
-// Init auth UI
 updateAuthUI();
 
 // --- Data Fetching ---
@@ -98,9 +141,27 @@ async function fetchJSONAuth(path, options = {}) {
 async function loadDeals() {
     try {
         const records = await fetchJSON('/api/latest');
-        renderDealStats(records);
-        renderDealsTable(records || []);
+        const newRecords = records || [];
+
+        // Detect new/changed servers
+        const newIDs = new Set(newRecords.map(r => r.ServerID));
+        const addedIDs = new Set();
+        if (previousServerIDs.size > 0) {
+            for (const id of newIDs) {
+                if (!previousServerIDs.has(id)) addedIDs.add(id);
+            }
+            if (addedIDs.size > 0) {
+                showToast(`${addedIDs.size} new deal${addedIDs.size > 1 ? 's' : ''} found`, 'info');
+            }
+        }
+        previousServerIDs = newIDs;
+
+        rawRecords = newRecords;
+        populateDatacenterDropdown(newRecords);
+        renderDealStats(newRecords);
+        renderSortedFilteredTable(addedIDs);
         updateTimestamp();
+        resetCountdown();
     } catch (err) {
         console.error('Failed to load deals:', err);
     }
@@ -136,15 +197,118 @@ function renderDealStats(records) {
     `;
 }
 
-function renderDealsTable(records) {
+// --- Sorting ---
+
+function sortRecords(records) {
+    const key = sortState.key;
+    const dir = sortState.dir === 'asc' ? 1 : -1;
+    return [...records].sort((a, b) => {
+        let va = a[key], vb = b[key];
+        if (typeof va === 'string') {
+            return dir * va.localeCompare(vb);
+        }
+        return dir * (va - vb);
+    });
+}
+
+document.querySelectorAll('th.sortable').forEach(th => {
+    th.addEventListener('click', () => {
+        const key = th.dataset.sort;
+        if (sortState.key === key) {
+            sortState.dir = sortState.dir === 'asc' ? 'desc' : 'asc';
+        } else {
+            sortState.key = key;
+            sortState.dir = key === 'Score' || key === 'Price' ? 'desc' : 'asc';
+        }
+        // Update header styles
+        document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
+        th.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+        renderSortedFilteredTable();
+    });
+});
+
+// --- Filtering ---
+
+function applyFilters(records) {
+    return records.filter(r => {
+        if (filterState.search) {
+            const q = filterState.search.toLowerCase();
+            if (!r.CPU.toLowerCase().includes(q) && !r.Datacenter.toLowerCase().includes(q) && !String(r.ServerID).includes(q)) {
+                return false;
+            }
+        }
+        if (filterState.dc && r.Datacenter !== filterState.dc) return false;
+        if (filterState.priceMin && r.Price < Number(filterState.priceMin)) return false;
+        if (filterState.priceMax && r.Price > Number(filterState.priceMax)) return false;
+        if (filterState.nvmeOnly && r.NVMeCount === 0) return false;
+        return true;
+    });
+}
+
+function populateDatacenterDropdown(records) {
+    const select = document.getElementById('filter-dc');
+    const current = select.value;
+    const dcs = [...new Set(records.map(r => r.Datacenter))].sort();
+    select.innerHTML = '<option value="">All Datacenters</option>';
+    dcs.forEach(dc => {
+        const opt = document.createElement('option');
+        opt.value = dc;
+        opt.textContent = dc;
+        select.appendChild(opt);
+    });
+    if (filterState.dc && dcs.includes(filterState.dc)) {
+        select.value = filterState.dc;
+    }
+}
+
+function renderSortedFilteredTable(newIDs) {
+    const filtered = applyFilters(rawRecords);
+    const sorted = sortRecords(filtered);
+    renderDealsTable(sorted, newIDs);
+}
+
+// Debounced input handler
+let filterDebounce = null;
+function onFilterChange() {
+    clearTimeout(filterDebounce);
+    filterDebounce = setTimeout(() => {
+        filterState.search = document.getElementById('filter-search').value;
+        filterState.dc = document.getElementById('filter-dc').value;
+        filterState.priceMin = document.getElementById('filter-price-min').value;
+        filterState.priceMax = document.getElementById('filter-price-max').value;
+        filterState.nvmeOnly = document.getElementById('filter-nvme').checked;
+        saveFilterState();
+        renderSortedFilteredTable();
+    }, 200);
+}
+
+// Bind filter inputs
+['filter-search', 'filter-dc', 'filter-price-min', 'filter-price-max', 'filter-nvme'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', onFilterChange);
+    if (el) el.addEventListener('change', onFilterChange);
+});
+
+// Restore filter state on load
+function restoreFilterUI() {
+    document.getElementById('filter-search').value = filterState.search || '';
+    document.getElementById('filter-price-min').value = filterState.priceMin || '';
+    document.getElementById('filter-price-max').value = filterState.priceMax || '';
+    document.getElementById('filter-nvme').checked = filterState.nvmeOnly || false;
+}
+restoreFilterUI();
+
+function renderDealsTable(records, newIDs) {
     const tbody = document.getElementById('deals-table');
     if (records.length === 0) {
         tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No deals found. The scanner may not have run yet.</td></tr>';
         return;
     }
 
-    tbody.innerHTML = records.map(r => `
-        <tr class="clickable" onclick="openSimModal(${r.ServerID})">
+    tbody.innerHTML = records.map(r => {
+        const isNew = newIDs && newIDs.has(r.ServerID);
+        return `
+        <tr class="clickable${isNew ? ' row-new' : ''}" onclick="openSimModal(${r.ServerID})">
             <td style="font-family: 'JetBrains Mono', monospace; font-size: 0.8rem;">${r.ServerID}</td>
             <td>${escapeHtml(r.CPU)}</td>
             <td>${r.RAMSize} GB</td>
@@ -154,8 +318,8 @@ function renderDealsTable(records) {
             <td style="font-weight: 600; color: var(--green);">&euro;${r.Price.toFixed(2)}</td>
             <td>${renderScoreBar(r.Score)}</td>
             <td style="color: var(--text-muted); font-size: 0.8rem;">${formatTime(r.ScannedAt)}</td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 }
 
 function renderScoreBar(score) {
@@ -170,6 +334,29 @@ function renderScoreBar(score) {
     `;
 }
 
+// --- Refresh countdown ---
+
+function resetCountdown() {
+    countdownRemaining = REFRESH_INTERVAL;
+    updateCountdownBar();
+}
+
+function tickCountdown() {
+    countdownRemaining = Math.max(0, countdownRemaining - 1);
+    updateCountdownBar();
+}
+
+function updateCountdownBar() {
+    const bar = document.getElementById('refresh-bar');
+    if (bar) bar.style.width = ((countdownRemaining / REFRESH_INTERVAL) * 100) + '%';
+}
+
+// --- Data export ---
+
+function exportData(format) {
+    window.open(API + '/api/export?format=' + encodeURIComponent(format), '_blank');
+}
+
 // --- Price History ---
 
 async function loadCPUSelect() {
@@ -182,7 +369,7 @@ async function loadCPUSelect() {
         cpus.forEach(cpu => {
             const opt = document.createElement('option');
             opt.value = cpu;
-            opt.textContent = `${cpu} (${stats[cpu].Count} records, avg €${stats[cpu].AvgPrice.toFixed(0)})`;
+            opt.textContent = `${cpu} (${stats[cpu].Count} records, avg \u20AC${stats[cpu].AvgPrice.toFixed(0)})`;
             select.appendChild(opt);
         });
         if (current && cpus.includes(current)) {
@@ -213,14 +400,29 @@ document.getElementById('cpu-select').addEventListener('change', async function(
     }
 });
 
+function getChartColors() {
+    const style = getComputedStyle(document.documentElement);
+    return {
+        legend: style.getPropertyValue('--chart-legend').trim() || '#9499b3',
+        tooltipBg: style.getPropertyValue('--chart-tooltip-bg').trim() || '#1a1d28',
+        tooltipBorder: style.getPropertyValue('--chart-tooltip-border').trim() || '#2e3347',
+        tooltipTitle: style.getPropertyValue('--chart-tooltip-title').trim() || '#e4e6ef',
+        tooltipBody: style.getPropertyValue('--chart-tooltip-body').trim() || '#9499b3',
+        grid: style.getPropertyValue('--chart-grid').trim() || 'rgba(46, 51, 71, 0.5)',
+        tick: style.getPropertyValue('--chart-tick').trim() || '#6b7194',
+        green: style.getPropertyValue('--green').trim() || '#22c55e',
+        accent: style.getPropertyValue('--accent').trim() || '#f97316',
+    };
+}
+
 function renderPriceChart(records, cpu) {
     if (priceChart) priceChart.destroy();
 
-    // Sort by time ascending
     const sorted = [...records].reverse();
     const labels = sorted.map(r => formatTime(r.ScannedAt));
     const prices = sorted.map(r => r.Price);
     const scores = sorted.map(r => r.Score);
+    const c = getChartColors();
 
     document.getElementById('history-info').textContent = `${sorted.length} data points`;
 
@@ -231,10 +433,10 @@ function renderPriceChart(records, cpu) {
             labels: labels,
             datasets: [
                 {
-                    label: 'Price (€)',
+                    label: 'Price (\u20AC)',
                     data: prices,
-                    borderColor: '#22c55e',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    borderColor: c.green,
+                    backgroundColor: c.green + '1a',
                     fill: true,
                     tension: 0.3,
                     pointRadius: sorted.length > 50 ? 0 : 3,
@@ -243,8 +445,8 @@ function renderPriceChart(records, cpu) {
                 {
                     label: 'Score',
                     data: scores,
-                    borderColor: '#f97316',
-                    backgroundColor: 'rgba(249, 115, 22, 0.1)',
+                    borderColor: c.accent,
+                    backgroundColor: c.accent + '1a',
                     fill: false,
                     tension: 0.3,
                     pointRadius: sorted.length > 50 ? 0 : 3,
@@ -258,33 +460,53 @@ function renderPriceChart(records, cpu) {
             maintainAspectRatio: false,
             interaction: { intersect: false, mode: 'index' },
             plugins: {
-                legend: { labels: { color: '#9499b3', font: { size: 12 } } },
+                legend: { labels: { color: c.legend, font: { size: 12 } } },
                 tooltip: {
-                    backgroundColor: '#1a1d28',
-                    borderColor: '#2e3347',
+                    backgroundColor: c.tooltipBg,
+                    borderColor: c.tooltipBorder,
                     borderWidth: 1,
-                    titleColor: '#e4e6ef',
-                    bodyColor: '#9499b3',
+                    titleColor: c.tooltipTitle,
+                    bodyColor: c.tooltipBody,
                 }
             },
             scales: {
                 x: {
-                    ticks: { color: '#6b7194', maxTicksLimit: 10, font: { size: 11 } },
-                    grid: { color: 'rgba(46, 51, 71, 0.5)' },
+                    ticks: { color: c.tick, maxTicksLimit: 10, font: { size: 11 } },
+                    grid: { color: c.grid },
                 },
                 y: {
                     position: 'left',
-                    ticks: { color: '#22c55e', callback: v => '€' + v, font: { size: 11 } },
-                    grid: { color: 'rgba(46, 51, 71, 0.5)' },
+                    ticks: { color: c.green, callback: v => '\u20AC' + v, font: { size: 11 } },
+                    grid: { color: c.grid },
                 },
                 y1: {
                     position: 'right',
-                    ticks: { color: '#f97316', font: { size: 11 } },
+                    ticks: { color: c.accent, font: { size: 11 } },
                     grid: { drawOnChartArea: false },
                 }
             }
         }
     });
+}
+
+function updateChartColors() {
+    if (!priceChart) return;
+    const c = getChartColors();
+    priceChart.options.plugins.legend.labels.color = c.legend;
+    priceChart.options.plugins.tooltip.backgroundColor = c.tooltipBg;
+    priceChart.options.plugins.tooltip.borderColor = c.tooltipBorder;
+    priceChart.options.plugins.tooltip.titleColor = c.tooltipTitle;
+    priceChart.options.plugins.tooltip.bodyColor = c.tooltipBody;
+    priceChart.options.scales.x.ticks.color = c.tick;
+    priceChart.options.scales.x.grid.color = c.grid;
+    priceChart.options.scales.y.ticks.color = c.green;
+    priceChart.options.scales.y.grid.color = c.grid;
+    priceChart.options.scales.y1.ticks.color = c.accent;
+    priceChart.data.datasets[0].borderColor = c.green;
+    priceChart.data.datasets[0].backgroundColor = c.green + '1a';
+    priceChart.data.datasets[1].borderColor = c.accent;
+    priceChart.data.datasets[1].backgroundColor = c.accent + '1a';
+    priceChart.update('none');
 }
 
 function renderCPUStats(stats) {
@@ -346,19 +568,15 @@ async function openSimModal(serverID) {
             + renderSimMetric('Disk Utilization', r.DiskBefore, r.DiskAfter, data.health_before.disk, data.health_after.disk)
             + renderSimMetric('Monthly Cost', r.MonthlyCostBefore, r.MonthlyCostAfter, null, null, true);
 
-        // Try to show score breakdown from latest scan data
-        try {
-            const latest = await fetchJSON('/api/latest?limit=500');
-            const serverData = (latest || []).find(s => s.ServerID === serverID);
-            if (serverData && serverData.BreakdownJSON && serverData.BreakdownJSON !== '{}') {
+        // Show score breakdown from stored data
+        const serverData = rawRecords.find(s => s.ServerID === serverID);
+        if (serverData && serverData.BreakdownJSON && serverData.BreakdownJSON !== '{}') {
+            try {
                 const bd = JSON.parse(serverData.BreakdownJSON);
                 breakdown.innerHTML = renderBreakdown(bd);
-            }
-        } catch (e) {
-            // Non-critical, skip breakdown display
+            } catch (e) { /* skip */ }
         }
 
-        // Show snipe button
         orderSection.innerHTML = `
             <button class="snipe-btn" onclick="startOrderCheck(${serverID})">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
@@ -405,7 +623,7 @@ function renderBreakdown(bd) {
 }
 
 function renderSimMetric(label, before, after, healthBefore, healthAfter, isCost) {
-    const fmt = isCost ? v => `€${v.toFixed(0)}` : v => `${v.toFixed(1)}%`;
+    const fmt = isCost ? v => `\u20AC${v.toFixed(0)}` : v => `${v.toFixed(1)}%`;
     const healthB = healthBefore ? `<span class="health-label health-${healthBefore}">${healthBefore}</span>` : '';
     const healthA = healthAfter ? `<span class="health-label health-${healthAfter}">${healthAfter}</span>` : '';
     const improved = after < before;
@@ -428,7 +646,6 @@ function closeSimModal() {
     currentSimServerID = null;
 }
 
-// Close modal on overlay click
 document.getElementById('sim-modal').addEventListener('click', function(e) {
     if (e.target === this) closeSimModal();
 });
@@ -436,7 +653,6 @@ document.getElementById('auth-modal').addEventListener('click', function(e) {
     if (e.target === this) closeAuthModal();
 });
 
-// Close modal on Escape
 document.addEventListener('keydown', e => {
     if (e.key === 'Escape') {
         closeSimModal();
@@ -444,7 +660,6 @@ document.addEventListener('keydown', e => {
     }
 });
 
-// Enter key in auth input
 document.getElementById('auth-token-input').addEventListener('keydown', e => {
     if (e.key === 'Enter') saveAuthToken();
 });
@@ -529,7 +744,6 @@ async function confirmOrder(serverID) {
             `;
         }
 
-        // Refresh orders panel
         loadOrders();
     } catch (err) {
         if (err.message === 'Not authenticated' || err.message === 'Unauthorized') return;
@@ -604,7 +818,7 @@ async function loadConfig() {
             'Min CPU Cores': cfg.filters.MinCPUCores,
             'Min Drives': cfg.filters.MinDrives,
             'Min Drive Size': cfg.filters.MinDriveSizeGB + ' GB',
-            'Max Price': '€' + cfg.filters.MaxPriceEUR,
+            'Max Price': '\u20AC' + cfg.filters.MaxPriceEUR,
             'DC Prefix': cfg.filters.DatacenterPrefix,
         }) + renderConfigSection('Scoring Weights', {
             'CPU': (cfg.scoring.CPUWeight * 100).toFixed(0) + '%',
@@ -624,7 +838,7 @@ async function loadConfig() {
         }) + renderConfigSection('Auto-Order', {
             'Enabled': cfg.order.enabled ? 'Yes' : 'No',
             'Min Score': cfg.order.min_score,
-            'Max Price': '€' + cfg.order.max_price_eur,
+            'Max Price': '\u20AC' + cfg.order.max_price_eur,
             'Require Approval': cfg.order.require_approval ? 'Yes' : 'No',
         }) + renderConfigSection('Watch', {
             'Interval': cfg.watch.Interval || 'N/A',
@@ -652,9 +866,9 @@ function escapeHtml(str) {
 }
 
 function formatTime(ts) {
-    if (!ts) return '—';
+    if (!ts) return '\u2014';
     const d = new Date(ts);
-    if (isNaN(d.getTime())) return '—';
+    if (isNaN(d.getTime())) return '\u2014';
     const now = new Date();
     const diffMs = now - d;
     const diffMin = Math.floor(diffMs / 60000);
@@ -674,4 +888,5 @@ function updateTimestamp() {
 // --- Init & Auto-Refresh ---
 
 loadDeals();
-refreshTimer = setInterval(loadDeals, 60000);
+refreshTimer = setInterval(loadDeals, REFRESH_INTERVAL * 1000);
+countdownTimer = setInterval(tickCountdown, 1000);

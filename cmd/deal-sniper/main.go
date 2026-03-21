@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -8,7 +9,9 @@ import (
 	"io/fs"
 	"net/http"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"github.com/madfam-org/server-auction-tracker/internal/config"
@@ -58,6 +61,8 @@ func main() {
 	mux.HandleFunc("GET /api/simulate/{server_id}", s.handleSimulate)
 	mux.HandleFunc("GET /api/orders", s.handleOrders)
 	mux.HandleFunc("GET /api/config", s.handleConfig)
+	mux.HandleFunc("GET /api/export", s.handleExport)
+	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("POST /api/order/check", s.authMiddleware(s.handleOrderCheck))
 	mux.HandleFunc("POST /api/order/confirm", s.authMiddleware(s.handleOrderConfirm))
 
@@ -76,11 +81,28 @@ func main() {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	log.WithField("addr", *addr).Info("Deal Sniper web server starting")
-	if err := srv.ListenAndServe(); err != nil {
-		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+	// Graceful shutdown
+	shutdownCh := make(chan os.Signal, 1)
+	signal.Notify(shutdownCh, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		log.WithField("addr", *addr).Info("Deal Sniper web server starting")
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.WithError(err).Fatal("Server failed")
+		}
+	}()
+
+	<-shutdownCh
+	log.Info("Shutting down gracefully...")
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		fmt.Fprintf(os.Stderr, "shutdown error: %v\n", err)
 		os.Exit(1)
 	}
+	log.Info("Server stopped")
 }
 
 type server struct {
@@ -145,19 +167,10 @@ func (s *server) handleSimulate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Look up the server from the most recent scan data
-	records, err := s.store.GetHistory("", 500)
+	found, err := s.store.GetByServerID(serverID)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
-	}
-
-	var found *store.ScanRecord
-	for i := range records {
-		if records[i].ServerID == serverID {
-			found = &records[i]
-			break
-		}
 	}
 	if found == nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "server not found in recent scans"})
@@ -177,14 +190,7 @@ func (s *server) handleSimulate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleOrders(w http.ResponseWriter, r *http.Request) {
-	// Direct query — store interface doesn't expose order reads, so query the DB directly
-	sqlStore, ok := s.store.(*store.SQLiteStore)
-	if !ok {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "orders not available"})
-		return
-	}
-
-	orders, err := getOrderAttempts(sqlStore)
+	orders, err := s.store.GetOrderAttempts(100)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -207,6 +213,80 @@ func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	writeJSON(w, http.StatusOK, redacted)
+}
+
+func (s *server) handleExport(w http.ResponseWriter, r *http.Request) {
+	format := r.URL.Query().Get("format")
+	if format == "" {
+		format = "json"
+	}
+
+	records, err := s.store.GetHistory("", 500)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	switch format {
+	case "csv":
+		w.Header().Set("Content-Type", "text/csv")
+		w.Header().Set("Content-Disposition", "attachment; filename=deal-sniper-export.csv")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintln(w, "ServerID,CPU,RAM_GB,Storage_TB,NVMe,Drives,Datacenter,Price_EUR,Score,ScannedAt")
+		for _, r := range records {
+			fmt.Fprintf(w, "%d,%q,%d,%.2f,%d,%d,%q,%.2f,%.1f,%s\n",
+				r.ServerID, r.CPU, r.RAMSize, r.TotalStorageTB,
+				r.NVMeCount, r.DriveCount, r.Datacenter,
+				r.Price, r.Score, r.ScannedAt.Format(time.RFC3339))
+		}
+	default:
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("Content-Disposition", "attachment; filename=deal-sniper-export.json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(records) //nolint:errcheck
+	}
+}
+
+func (s *server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
+	records, err := s.store.GetHistory("", 500)
+	if err != nil {
+		http.Error(w, "internal error", http.StatusInternalServerError)
+		return
+	}
+
+	var total int
+	var sumPrice, bestScore float64
+	var lastScan time.Time
+
+	for _, r := range records {
+		total++
+		sumPrice += r.Price
+		if r.Score > bestScore {
+			bestScore = r.Score
+		}
+		if r.ScannedAt.After(lastScan) {
+			lastScan = r.ScannedAt
+		}
+	}
+
+	avgPrice := 0.0
+	if total > 0 {
+		avgPrice = sumPrice / float64(total)
+	}
+
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	fmt.Fprintf(w, "# HELP deal_sniper_deals_total Number of tracked deals\n")
+	fmt.Fprintf(w, "# TYPE deal_sniper_deals_total gauge\n")
+	fmt.Fprintf(w, "deal_sniper_deals_total %d\n", total)
+	fmt.Fprintf(w, "# HELP deal_sniper_avg_price_eur Average deal price in EUR\n")
+	fmt.Fprintf(w, "# TYPE deal_sniper_avg_price_eur gauge\n")
+	fmt.Fprintf(w, "deal_sniper_avg_price_eur %.2f\n", avgPrice)
+	fmt.Fprintf(w, "# HELP deal_sniper_best_score Highest deal score\n")
+	fmt.Fprintf(w, "# TYPE deal_sniper_best_score gauge\n")
+	fmt.Fprintf(w, "deal_sniper_best_score %.1f\n", bestScore)
+	fmt.Fprintf(w, "# HELP deal_sniper_last_scan_unix Timestamp of last scan in unix epoch\n")
+	fmt.Fprintf(w, "# TYPE deal_sniper_last_scan_unix gauge\n")
+	fmt.Fprintf(w, "deal_sniper_last_scan_unix %d\n", lastScan.Unix())
 }
 
 // --- helpers ---
@@ -251,16 +331,6 @@ type orderRedacted struct {
 	MinScore        float64 `json:"min_score"`
 	MaxPriceEUR     float64 `json:"max_price_eur"`
 	RequireApproval bool    `json:"require_approval"`
-}
-
-type orderAttempt struct {
-	ID          int       `json:"id"`
-	ServerID    int       `json:"server_id"`
-	Score       float64   `json:"score"`
-	Price       float64   `json:"price"`
-	Success     bool      `json:"success"`
-	Message     string    `json:"message"`
-	AttemptedAt time.Time `json:"attempted_at"`
 }
 
 func healthLabels(cpu, ram, disk float64) map[string]string {

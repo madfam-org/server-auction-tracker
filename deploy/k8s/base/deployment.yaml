@@ -18,6 +18,10 @@ spec:
         app.kubernetes.io/name: deal-sniper-web
         app.kubernetes.io/component: web
         app.kubernetes.io/part-of: foundry-scout
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "4205"
+        prometheus.io/path: "/metrics"
     spec:
       imagePullSecrets:
         - name: ghcr-credentials
@@ -28,7 +32,7 @@ spec:
         fsGroup: 65532
       containers:
         - name: deal-sniper
-          image: ghcr.io/madfam-org/foundry-scout:latest
+          image: foundry-scout
           command: ["./deal-sniper"]
           args: ["--config", "/config/scout.yaml"]
           ports:

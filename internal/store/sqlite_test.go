@@ -117,3 +117,80 @@ func TestGetStatsNoResults(t *testing.T) {
 	require.NoError(t, err)
 	assert.Nil(t, stats)
 }
+
+func TestGetByServerID(t *testing.T) {
+	s := setupTestDB(t)
+
+	servers := []scorer.ScoredServer{{
+		Server: scanner.Server{
+			ID: 2001, CPU: "AMD EPYC 7443P", RAMSize: 128,
+			TotalStorageTB: 4.0, NVMeCount: 2, DriveCount: 4,
+			Datacenter: "HEL1-DC7", Price: 75.00,
+		},
+		Score: 92.1,
+	}}
+	require.NoError(t, s.SaveScan(servers))
+
+	rec, err := s.GetByServerID(2001)
+	require.NoError(t, err)
+	require.NotNil(t, rec)
+	assert.Equal(t, 2001, rec.ServerID)
+	assert.Equal(t, "AMD EPYC 7443P", rec.CPU)
+	assert.Equal(t, 75.00, rec.Price)
+
+	// Not found
+	rec, err = s.GetByServerID(9999)
+	require.NoError(t, err)
+	assert.Nil(t, rec)
+}
+
+func TestGetOrderAttempts(t *testing.T) {
+	s := setupTestDB(t)
+
+	require.NoError(t, s.SaveOrderAttempt(1001, 85.0, 39.00, true, "order placed"))
+	require.NoError(t, s.SaveOrderAttempt(1002, 72.0, 55.00, false, "price too high"))
+
+	orders, err := s.GetOrderAttempts(10)
+	require.NoError(t, err)
+	assert.Len(t, orders, 2)
+
+	// Verify both records exist (order may vary due to same-second timestamps)
+	serverIDs := []int{orders[0].ServerID, orders[1].ServerID}
+	assert.Contains(t, serverIDs, 1001)
+	assert.Contains(t, serverIDs, 1002)
+
+	// Test limit
+	orders, err = s.GetOrderAttempts(1)
+	require.NoError(t, err)
+	assert.Len(t, orders, 1)
+}
+
+func TestPruneOldScans(t *testing.T) {
+	s := setupTestDB(t)
+
+	// Insert records via SaveScan (they get current timestamp)
+	servers := []scorer.ScoredServer{{
+		Server: scanner.Server{
+			ID: 3001, CPU: "Intel Xeon", RAMSize: 64,
+			TotalStorageTB: 1.0, NVMeCount: 1, DriveCount: 2,
+			Datacenter: "FSN1", Price: 40.00,
+		},
+		Score: 70,
+	}}
+	require.NoError(t, s.SaveScan(servers))
+
+	// Pruning with a long retention should not delete anything
+	pruned, err := s.PruneOldScans(90)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), pruned)
+
+	// Verify records still exist
+	records, err := s.GetHistory("", 10)
+	require.NoError(t, err)
+	assert.Len(t, records, 1)
+
+	// Zero retention should be a no-op
+	pruned, err = s.PruneOldScans(0)
+	require.NoError(t, err)
+	assert.Equal(t, int64(0), pruned)
+}

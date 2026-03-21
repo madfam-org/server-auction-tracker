@@ -36,7 +36,8 @@ type Scoring struct {
 }
 
 type Database struct {
-	Path string `mapstructure:"path"`
+	Path          string `mapstructure:"path"`
+	RetentionDays int    `mapstructure:"retention_days"`
 }
 
 type Watch struct {
@@ -103,6 +104,7 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("scoring.locality_weight", 0.05)
 
 	v.SetDefault("database.path", "foundry-scout.db")
+	v.SetDefault("database.retention_days", 90)
 	v.SetDefault("log_level", "info")
 
 	v.SetDefault("watch.interval", "5m")

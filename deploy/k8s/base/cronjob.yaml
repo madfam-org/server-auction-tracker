@@ -30,7 +30,7 @@ spec:
             fsGroup: 65532
           containers:
             - name: foundry-scout
-              image: ghcr.io/madfam-org/foundry-scout:latest
+              image: foundry-scout
               args: ["watch", "--once", "--config", "/config/scout.yaml"]
               resources:
                 requests:
@@ -53,11 +53,11 @@ spec:
                 - name: data
                   mountPath: /data
               env:
-                - name: SCOUT_NOTIFY_ENCLII_WEBHOOK_SECRET
+                - name: SCOUT_NOTIFY_ENCLII_CALLBACK_TOKEN
                   valueFrom:
                     secretKeyRef:
                       name: foundry-scout-secrets
-                      key: enclii-webhook-secret
+                      key: enclii-callback-token
                       optional: true
           volumes:
             - name: config

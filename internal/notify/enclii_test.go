@@ -29,9 +29,9 @@ func testServers() []scorer.ScoredServer {
 
 func TestEncliiNotifier(t *testing.T) {
 	var received encliiPayload
-	var gotSignature string
+	var gotAuth string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		gotSignature = r.Header.Get("X-Webhook-Signature")
+		gotAuth = r.Header.Get("Authorization")
 		body, _ := io.ReadAll(r.Body)
 		json.Unmarshal(body, &received)
 		w.WriteHeader(http.StatusOK)
@@ -54,8 +54,30 @@ func TestEncliiNotifier(t *testing.T) {
 	assert.Equal(t, 85.5, received.Data.TopScore)
 	assert.Len(t, received.Data.Servers, 1)
 	assert.Equal(t, 1001, received.Data.Servers[0].ID)
-	assert.NotEmpty(t, gotSignature)
-	assert.Contains(t, gotSignature, "sha256=")
+	assert.Equal(t, "Bearer test-secret", gotAuth)
+}
+
+func TestEncliiNotifierEnvOverride(t *testing.T) {
+	var gotAuth string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = r.Header.Get("Authorization")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	t.Setenv("SCOUT_NOTIFY_ENCLII_CALLBACK_TOKEN", "env-token")
+
+	cfg := config.EncliiConfig{
+		APIURL:        srv.URL,
+		ProjectSlug:   "foundry-scout",
+		WebhookSecret: "config-secret",
+	}
+
+	n := NewEncliiNotifier(cfg)
+	err := n.Notify(context.Background(), testServers())
+	require.NoError(t, err)
+
+	assert.Equal(t, "Bearer env-token", gotAuth, "env var should take precedence over config")
 }
 
 func TestEncliiNotifierEmpty(t *testing.T) {

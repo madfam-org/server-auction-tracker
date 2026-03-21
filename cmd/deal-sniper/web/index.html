@@ -7,7 +7,7 @@
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <script src="chart.umd.min.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -26,6 +26,14 @@
                 <h1>Deal <span>Sniper</span></h1>
             </div>
             <div class="header-right">
+                <button class="theme-toggle" id="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+                    <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
                 <button class="auth-btn" id="auth-btn" onclick="showAuthModal()" title="Authenticate for orders">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16">
                         <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
@@ -39,6 +47,11 @@
             </div>
         </div>
     </header>
+
+    <!-- Refresh countdown bar -->
+    <div class="refresh-bar-container">
+        <div class="refresh-bar" id="refresh-bar"></div>
+    </div>
 
     <nav>
         <div class="container">
@@ -54,19 +67,40 @@
         <div id="panel-deals" class="panel active">
             <div class="container">
                 <div class="stats-row" id="deal-stats"></div>
+
+                <!-- Filter bar -->
+                <div class="filter-bar" id="filter-bar">
+                    <input type="text" id="filter-search" placeholder="Search CPU, datacenter..." class="filter-input">
+                    <select id="filter-dc" class="filter-select">
+                        <option value="">All Datacenters</option>
+                    </select>
+                    <div class="filter-range">
+                        <input type="number" id="filter-price-min" placeholder="Min €" class="filter-input filter-input-sm" min="0">
+                        <span class="filter-sep">—</span>
+                        <input type="number" id="filter-price-max" placeholder="Max €" class="filter-input filter-input-sm" min="0">
+                    </div>
+                    <label class="filter-toggle">
+                        <input type="checkbox" id="filter-nvme"> NVMe only
+                    </label>
+                    <div class="filter-actions">
+                        <button class="export-btn" onclick="exportData('csv')" title="Export CSV">CSV</button>
+                        <button class="export-btn" onclick="exportData('json')" title="Export JSON">JSON</button>
+                    </div>
+                </div>
+
                 <div class="table-wrap">
                     <table>
                         <thead>
                             <tr>
-                                <th>ID</th>
-                                <th>CPU</th>
-                                <th>RAM</th>
-                                <th>Storage</th>
-                                <th>NVMe</th>
-                                <th>DC</th>
-                                <th>Price</th>
-                                <th>Score</th>
-                                <th>Scanned</th>
+                                <th class="sortable" data-sort="ServerID">ID</th>
+                                <th class="sortable" data-sort="CPU">CPU</th>
+                                <th class="sortable" data-sort="RAMSize">RAM</th>
+                                <th class="sortable" data-sort="TotalStorageTB">Storage</th>
+                                <th class="sortable" data-sort="NVMeCount">NVMe</th>
+                                <th class="sortable" data-sort="Datacenter">DC</th>
+                                <th class="sortable" data-sort="Price">Price</th>
+                                <th class="sortable" data-sort="Score">Score</th>
+                                <th class="sortable" data-sort="ScannedAt">Scanned</th>
                             </tr>
                         </thead>
                         <tbody id="deals-table"></tbody>
