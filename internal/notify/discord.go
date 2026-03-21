@@ -57,9 +57,9 @@ func (n *DiscordNotifier) Notify(ctx context.Context, servers []scorer.ScoredSer
 
 func buildDiscordPayload(servers []scorer.ScoredServer) map[string]interface{} {
 	var lines []string
-	for _, s := range servers {
+	for i := range servers {
 		lines = append(lines, fmt.Sprintf("**#%d** %s | %dGB | €%.2f | Score: %.1f | %s",
-			s.Server.ID, s.Server.CPU, s.Server.RAMSize, s.Server.Price, s.Score, s.Server.Datacenter))
+			servers[i].Server.ID, servers[i].Server.CPU, servers[i].Server.RAMSize, servers[i].Server.Price, servers[i].Score, servers[i].Server.Datacenter))
 	}
 
 	return map[string]interface{}{

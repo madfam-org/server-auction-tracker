@@ -54,14 +54,14 @@ func (n *EncliiNotifier) Notify(ctx context.Context, servers []scorer.ScoredServ
 	}
 
 	summaries := make([]encliiServerSummary, 0, len(servers))
-	for _, s := range servers {
+	for i := range servers {
 		summaries = append(summaries, encliiServerSummary{
-			ID:         s.Server.ID,
-			CPU:        s.Server.CPU,
-			RAMGB:      s.Server.RAMSize,
-			PriceEUR:   s.Server.Price,
-			Score:      s.Score,
-			Datacenter: s.Server.Datacenter,
+			ID:         servers[i].Server.ID,
+			CPU:        servers[i].Server.CPU,
+			RAMGB:      servers[i].Server.RAMSize,
+			PriceEUR:   servers[i].Server.Price,
+			Score:      servers[i].Score,
+			Datacenter: servers[i].Server.Datacenter,
 		})
 	}
 

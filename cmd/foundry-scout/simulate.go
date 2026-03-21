@@ -86,18 +86,18 @@ func findServer(cfg *config.Config, serverID int) (*scanner.Server, error) {
 		return nil, fmt.Errorf("querying database: %w", dbErr)
 	}
 
-	for _, r := range records {
-		if r.ServerID == serverID {
+	for i := range records {
+		if records[i].ServerID == serverID {
 			log.Info("Found server in database history")
 			return &scanner.Server{
-				ID:             r.ServerID,
-				CPU:            r.CPU,
-				RAMSize:        r.RAMSize,
-				TotalStorageTB: r.TotalStorageTB,
-				NVMeCount:      r.NVMeCount,
-				DriveCount:     r.DriveCount,
-				Datacenter:     r.Datacenter,
-				Price:          r.Price,
+				ID:             records[i].ServerID,
+				CPU:            records[i].CPU,
+				RAMSize:        records[i].RAMSize,
+				TotalStorageTB: records[i].TotalStorageTB,
+				NVMeCount:      records[i].NVMeCount,
+				DriveCount:     records[i].DriveCount,
+				Datacenter:     records[i].Datacenter,
+				Price:          records[i].Price,
 			}, nil
 		}
 	}

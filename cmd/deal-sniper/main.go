@@ -43,7 +43,7 @@ func main() {
 		_ = db.Close()
 		log.Fatalf("initializing database: %v", err)
 	}
-	defer db.Close() //nolint:errcheck
+	defer db.Close() //nolint:errcheck,gocritic
 
 	s := &server{
 		store:   db,

@@ -16,12 +16,12 @@ func FormatDigest(deals []store.ScanRecord, period string) string {
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("Deal Sniper %s Digest — Top %d deals\n\n", period, len(deals)))
 
-	for i, d := range deals {
+	for i := range deals {
 		b.WriteString(fmt.Sprintf(
 			"%d. #%d %s — €%.2f (score %.1f) [%s]",
-			i+1, d.ServerID, d.CPU, d.Price, d.Score, d.Datacenter,
+			i+1, deals[i].ServerID, deals[i].CPU, deals[i].Price, deals[i].Score, deals[i].Datacenter,
 		))
-		if d.IsECC {
+		if deals[i].IsECC {
 			b.WriteString(" [ECC]")
 		}
 		b.WriteString("\n")

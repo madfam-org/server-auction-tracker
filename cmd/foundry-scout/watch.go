@@ -233,19 +233,19 @@ func checkAndSendDigest(ctx context.Context, db store.Store, cfg *config.Config,
 
 	// Convert top deals to ScoredServer for notifier compatibility
 	digestServers := make([]scorer.ScoredServer, len(deals))
-	for i, d := range deals {
+	for i := range deals {
 		digestServers[i] = scorer.ScoredServer{
 			Server: scanner.Server{
-				ID:             d.ServerID,
-				CPU:            d.CPU,
-				RAMSize:        d.RAMSize,
-				TotalStorageTB: d.TotalStorageTB,
-				NVMeCount:      d.NVMeCount,
-				DriveCount:     d.DriveCount,
-				Datacenter:     d.Datacenter,
-				Price:          d.Price,
+				ID:             deals[i].ServerID,
+				CPU:            deals[i].CPU,
+				RAMSize:        deals[i].RAMSize,
+				TotalStorageTB: deals[i].TotalStorageTB,
+				NVMeCount:      deals[i].NVMeCount,
+				DriveCount:     deals[i].DriveCount,
+				Datacenter:     deals[i].Datacenter,
+				Price:          deals[i].Price,
 			},
-			Score: d.Score,
+			Score: deals[i].Score,
 		}
 	}
 
