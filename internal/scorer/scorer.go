@@ -16,12 +16,14 @@ type ScoredServer struct {
 }
 
 type Breakdown struct {
-	CPUPerDollar     float64
-	RAMPerDollar     float64
-	StoragePerDollar float64
-	NVMeBonus        float64
-	CPUGenBonus      float64
-	LocalityBonus    float64
+	CPUPerDollar       float64
+	RAMPerDollar       float64
+	StoragePerDollar   float64
+	NVMeBonus          float64
+	CPUGenBonus        float64
+	LocalityBonus      float64
+	BenchmarkPerDollar float64
+	ECCBonus           float64
 }
 
 func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []ScoredServer {
@@ -31,16 +33,17 @@ func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []
 
 	// Compute raw metrics for normalization
 	type rawMetrics struct {
-		cpuPerDollar     float64
-		ramPerDollar     float64
-		storagePerDollar float64
-		nvmeRatio        float64
-		cpuGenScore      float64
-		dcMatch          float64
+		cpuPerDollar       float64
+		ramPerDollar       float64
+		storagePerDollar   float64
+		nvmeRatio          float64
+		cpuGenScore        float64
+		dcMatch            float64
+		benchmarkPerDollar float64
 	}
 
 	metrics := make([]rawMetrics, len(servers))
-	var maxCPU, maxRAM, maxStorage float64
+	var maxCPU, maxRAM, maxStorage, maxBenchmark float64
 
 	for i, srv := range servers {
 		price := srv.Price
@@ -77,18 +80,25 @@ func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []
 			dcMatch = 1.0
 		}
 
+		var benchmarkPD float64
+		if cpuInfo.BenchmarkScore > 0 {
+			benchmarkPD = float64(cpuInfo.BenchmarkScore) / price
+		}
+
 		metrics[i] = rawMetrics{
-			cpuPerDollar:     cpuVal,
-			ramPerDollar:     ramVal,
-			storagePerDollar: storageVal,
-			nvmeRatio:        nvmeRatio,
-			cpuGenScore:      cpupkg.GenerationScore(cpuInfo.Generation),
-			dcMatch:          dcMatch,
+			cpuPerDollar:       cpuVal,
+			ramPerDollar:       ramVal,
+			storagePerDollar:   storageVal,
+			nvmeRatio:          nvmeRatio,
+			cpuGenScore:        cpupkg.GenerationScore(cpuInfo.Generation),
+			dcMatch:            dcMatch,
+			benchmarkPerDollar: benchmarkPD,
 		}
 
 		maxCPU = math.Max(maxCPU, cpuVal)
 		maxRAM = math.Max(maxRAM, ramVal)
 		maxStorage = math.Max(maxStorage, storageVal)
+		maxBenchmark = math.Max(maxBenchmark, benchmarkPD)
 	}
 
 	// Normalize and score
@@ -99,24 +109,34 @@ func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []
 		cpuNorm := safeNormalize(m.cpuPerDollar, maxCPU)
 		ramNorm := safeNormalize(m.ramPerDollar, maxRAM)
 		storageNorm := safeNormalize(m.storagePerDollar, maxStorage)
+		benchmarkNorm := safeNormalize(m.benchmarkPerDollar, maxBenchmark)
+
+		var eccBonus float64
+		if srv.IsECC {
+			eccBonus = 1.0
+		}
 
 		rawScore := cpuNorm*scoring.CPUWeight +
 			ramNorm*scoring.RAMWeight +
 			storageNorm*scoring.StorageWeight +
 			m.nvmeRatio*scoring.NVMeWeight +
 			m.cpuGenScore*scoring.CPUGenWeight +
-			m.dcMatch*scoring.LocalityWeight
+			m.dcMatch*scoring.LocalityWeight +
+			benchmarkNorm*scoring.BenchmarkWeight +
+			eccBonus*scoring.ECCWeight
 
 		scored[i] = ScoredServer{
 			Server: srv,
 			Score:  math.Round(rawScore*10000) / 100, // 0-100 scale
 			Breakdown: Breakdown{
-				CPUPerDollar:     cpuNorm,
-				RAMPerDollar:     ramNorm,
-				StoragePerDollar: storageNorm,
-				NVMeBonus:        m.nvmeRatio,
-				CPUGenBonus:      m.cpuGenScore,
-				LocalityBonus:    m.dcMatch,
+				CPUPerDollar:       cpuNorm,
+				RAMPerDollar:       ramNorm,
+				StoragePerDollar:   storageNorm,
+				NVMeBonus:          m.nvmeRatio,
+				CPUGenBonus:        m.cpuGenScore,
+				LocalityBonus:      m.dcMatch,
+				BenchmarkPerDollar: benchmarkNorm,
+				ECCBonus:           eccBonus,
 			},
 		}
 	}

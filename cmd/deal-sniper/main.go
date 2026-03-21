@@ -62,6 +62,7 @@ func main() {
 	mux.HandleFunc("GET /api/orders", s.handleOrders)
 	mux.HandleFunc("GET /api/config", s.handleConfig)
 	mux.HandleFunc("GET /api/export", s.handleExport)
+	mux.HandleFunc("GET /api/analytics", s.handleAnalytics)
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("POST /api/order/check", s.authMiddleware(s.handleOrderCheck))
 	mux.HandleFunc("POST /api/order/confirm", s.authMiddleware(s.handleOrderConfirm))
@@ -122,7 +123,36 @@ func (s *server) handleLatest(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, records)
+
+	stats, _ := s.store.GetAllCPUStats()
+
+	enriched := make([]enrichedRecord, len(records))
+	for i, r := range records {
+		enriched[i].ScanRecord = r
+		if stats != nil {
+			if cpuStat, ok := stats[r.CPU]; ok && cpuStat.AvgPrice > 0 {
+				enriched[i].DealQualityPct = ((cpuStat.AvgPrice - r.Price) / cpuStat.AvgPrice) * 100
+				enriched[i].Percentile = computePercentile(r.Price, cpuStat.MinPrice, cpuStat.MaxPrice)
+			}
+		}
+	}
+
+	writeJSON(w, http.StatusOK, enriched)
+}
+
+func computePercentile(price, minPrice, maxPrice float64) int {
+	if maxPrice <= minPrice {
+		return 50
+	}
+	// Lower price = better percentile (100 = cheapest, 0 = most expensive)
+	pct := (1 - (price-minPrice)/(maxPrice-minPrice)) * 100
+	if pct < 0 {
+		return 0
+	}
+	if pct > 100 {
+		return 100
+	}
+	return int(pct)
 }
 
 func (s *server) handleHistory(w http.ResponseWriter, r *http.Request) {
@@ -247,6 +277,15 @@ func (s *server) handleExport(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (s *server) handleAnalytics(w http.ResponseWriter, r *http.Request) {
+	analytics, err := s.store.GetMarketAnalytics()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, analytics)
+}
+
 func (s *server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	records, err := s.store.GetHistory("", 500)
 	if err != nil {
@@ -311,6 +350,12 @@ func queryInt(r *http.Request, key string, defaultVal int) int {
 }
 
 // --- types ---
+
+type enrichedRecord struct {
+	store.ScanRecord
+	DealQualityPct float64 `json:"deal_quality_pct"`
+	Percentile     int     `json:"percentile"`
+}
 
 type simulateResponse struct {
 	Result       *simulate.Result       `json:"result"`

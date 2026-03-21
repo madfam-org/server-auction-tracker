@@ -30,12 +30,12 @@ go vet ./...
   - `cmd/deal-sniper/web/` — Frontend (vanilla HTML + Tailwind CDN + Chart.js + vanilla JS)
   - `cmd/deal-sniper/handlers.go` — API handler helpers
   - `cmd/deal-sniper/handlers_test.go` — Handler unit tests
-- `internal/config/` — Viper-based YAML config loading (filters, scoring, watch, notify, cluster, order)
+- `internal/config/` — Viper-based YAML config loading (filters, scoring, watch, notify, cluster, order, digest)
 - `internal/scanner/` — HTTP fetch + parse Hetzner auction JSON, retry client with backoff
-- `internal/scorer/` — Cluster-aware scoring engine
-- `internal/cpu/` — CPU model string parser (Ryzen, Intel, EPYC, Xeon)
-- `internal/store/` — SQLite repository (price history, scan results, order audit)
-- `internal/notify/` — Notification backends (enclii Switchyard, Slack, Discord) with dedup tracker
+- `internal/scorer/` — Cluster-aware scoring engine (benchmark + ECC bonuses)
+- `internal/cpu/` — CPU model string parser (Ryzen, Intel, EPYC, Xeon) + PassMark benchmark lookup (~90 models)
+- `internal/store/` — SQLite repository (price history, scan results, order audit, server tracker, market analytics)
+- `internal/notify/` — Notification backends (enclii, Slack, Discord, Webhook, Telegram) with multi-notifier, dedup tracker, and digest formatter
 - `internal/order/` — Hetzner Robot API client with eligibility gates
 - `internal/simulate/` — Cluster simulation engine (CPU/RAM/Disk utilization impact)
 - `deploy/k8s/` — Kustomize manifests (CronJob, Deployment, Service, ConfigMap, PVC, NetworkPolicy)
@@ -46,7 +46,7 @@ go vet ./...
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/api/health` | Liveness probe |
-| GET | `/api/latest` | Latest 50 scored servers |
+| GET | `/api/latest` | Latest 50 scored servers (enriched with deal quality, percentile, time-on-market) |
 | GET | `/api/history?cpu=X&limit=N` | Price history for a CPU model |
 | GET | `/api/stats` | Min/max/avg per CPU model |
 | GET | `/api/stats/{cpu}` | Stats for specific CPU |
@@ -55,6 +55,9 @@ go vet ./...
 | GET | `/api/config` | Current config (secrets redacted) |
 | POST | `/api/order/check` | Eligibility pre-check (requires Bearer auth) |
 | POST | `/api/order/confirm` | Place order via Robot API (requires Bearer auth) |
+| GET | `/api/analytics` | Market analytics (brand trends, DC volume, top CPUs, price histogram) |
+| GET | `/api/export` | CSV or JSON data export |
+| GET | `/metrics` | Prometheus metrics |
 | GET | `/` | Dashboard (embedded static files) |
 
 ## Deployment
@@ -85,3 +88,10 @@ go vet ./...
 - M5 (implemented): Auto-Order — Robot API with safety gates, audit logging
 - M6 (implemented): Web Dashboard — Deal Sniper UI at sniper.madfam.io
 - M7 (implemented): Buy Now Flow — Two-step order (check + confirm) with Bearer auth, score breakdown display
+- M8 (implemented): Competitive Parity — deal quality badges, shareable filter URLs
+- M9 (implemented): Time-on-Market — server tracker table, "Listed Xh ago" urgency signals
+- M10 (implemented): CPU Benchmarks — PassMark lookup (~90 models), benchmark-per-dollar scoring
+- M11 (implemented): Hetzner Field Persistence — ECC, setup price, next_reduce, fixed_price, bandwidth
+- M12 (implemented): Multi-Channel Notifications — Webhook, Telegram, MultiNotifier, min score filter
+- M13 (implemented): Market Analytics — brand trends, DC distribution, top CPUs, price histogram
+- M14 (implemented): Digest Notifications — daily/weekly top-N deal summaries via existing notifier

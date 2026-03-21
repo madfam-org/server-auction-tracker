@@ -16,14 +16,35 @@ let previousServerIDs = new Set();
 // --- Sort state ---
 const sortState = { key: 'Score', dir: 'desc' };
 
+(function loadSortFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const sortParam = params.get('sort');
+    if (sortParam) {
+        const [key, dir] = sortParam.split(':');
+        if (key) sortState.key = key;
+        if (dir === 'asc' || dir === 'desc') sortState.dir = dir;
+    }
+})();
+
 // --- Filter state (persisted to localStorage) ---
 const filterState = loadFilterState();
 
 function loadFilterState() {
     try {
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('search') || params.has('dc') || params.has('priceMin') || params.has('priceMax') || params.has('nvme') || params.has('ecc')) {
+            return {
+                search: params.get('search') || '',
+                dc: params.get('dc') || '',
+                priceMin: params.get('priceMin') || '',
+                priceMax: params.get('priceMax') || '',
+                nvmeOnly: params.get('nvme') === '1',
+                eccOnly: params.get('ecc') === '1',
+            };
+        }
         const saved = localStorage.getItem('ds_filters');
-        return saved ? JSON.parse(saved) : { search: '', dc: '', priceMin: '', priceMax: '', nvmeOnly: false };
-    } catch { return { search: '', dc: '', priceMin: '', priceMax: '', nvmeOnly: false }; }
+        return saved ? JSON.parse(saved) : { search: '', dc: '', priceMin: '', priceMax: '', nvmeOnly: false, eccOnly: false };
+    } catch { return { search: '', dc: '', priceMin: '', priceMax: '', nvmeOnly: false, eccOnly: false }; }
 }
 
 function saveFilterState() {
@@ -61,6 +82,7 @@ document.querySelectorAll('nav button').forEach(btn => {
 
         if (btn.dataset.panel === 'history') loadCPUSelect();
         if (btn.dataset.panel === 'orders') loadOrders();
+        if (btn.dataset.panel === 'analytics') loadAnalytics();
         if (btn.dataset.panel === 'config') loadConfig();
     });
 });
@@ -223,6 +245,7 @@ document.querySelectorAll('th.sortable').forEach(th => {
         // Update header styles
         document.querySelectorAll('th.sortable').forEach(h => h.classList.remove('sort-asc', 'sort-desc'));
         th.classList.add(sortState.dir === 'asc' ? 'sort-asc' : 'sort-desc');
+        syncFilterURL();
         renderSortedFilteredTable();
     });
 });
@@ -241,6 +264,7 @@ function applyFilters(records) {
         if (filterState.priceMin && r.Price < Number(filterState.priceMin)) return false;
         if (filterState.priceMax && r.Price > Number(filterState.priceMax)) return false;
         if (filterState.nvmeOnly && r.NVMeCount === 0) return false;
+        if (filterState.eccOnly && !r.is_ecc) return false;
         return true;
     });
 }
@@ -277,13 +301,40 @@ function onFilterChange() {
         filterState.priceMin = document.getElementById('filter-price-min').value;
         filterState.priceMax = document.getElementById('filter-price-max').value;
         filterState.nvmeOnly = document.getElementById('filter-nvme').checked;
+        filterState.eccOnly = document.getElementById('filter-ecc').checked;
         saveFilterState();
+        syncFilterURL();
         renderSortedFilteredTable();
     }, 200);
 }
 
+function syncFilterURL() {
+    const params = new URLSearchParams();
+    if (filterState.search) params.set('search', filterState.search);
+    if (filterState.dc) params.set('dc', filterState.dc);
+    if (filterState.priceMin) params.set('priceMin', filterState.priceMin);
+    if (filterState.priceMax) params.set('priceMax', filterState.priceMax);
+    if (filterState.nvmeOnly) params.set('nvme', '1');
+    if (filterState.eccOnly) params.set('ecc', '1');
+    if (sortState.key !== 'Score' || sortState.dir !== 'desc') {
+        params.set('sort', sortState.key + ':' + sortState.dir);
+    }
+    const qs = params.toString();
+    const url = window.location.pathname + (qs ? '?' + qs : '');
+    history.replaceState(null, '', url);
+}
+
+function shareFilters() {
+    syncFilterURL();
+    navigator.clipboard.writeText(window.location.href).then(() => {
+        showToast('URL copied to clipboard', 'success');
+    }).catch(() => {
+        showToast('Failed to copy URL', 'error');
+    });
+}
+
 // Bind filter inputs
-['filter-search', 'filter-dc', 'filter-price-min', 'filter-price-max', 'filter-nvme'].forEach(id => {
+['filter-search', 'filter-dc', 'filter-price-min', 'filter-price-max', 'filter-nvme', 'filter-ecc'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.addEventListener('input', onFilterChange);
     if (el) el.addEventListener('change', onFilterChange);
@@ -295,13 +346,14 @@ function restoreFilterUI() {
     document.getElementById('filter-price-min').value = filterState.priceMin || '';
     document.getElementById('filter-price-max').value = filterState.priceMax || '';
     document.getElementById('filter-nvme').checked = filterState.nvmeOnly || false;
+    document.getElementById('filter-ecc').checked = filterState.eccOnly || false;
 }
 restoreFilterUI();
 
 function renderDealsTable(records, newIDs) {
     const tbody = document.getElementById('deals-table');
     if (records.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9" class="empty-state">No deals found. The scanner may not have run yet.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" class="empty-state">No deals found. The scanner may not have run yet.</td></tr>';
         return;
     }
 
@@ -314,10 +366,17 @@ function renderDealsTable(records, newIDs) {
             <td>${r.RAMSize} GB</td>
             <td>${r.TotalStorageTB.toFixed(2)} TB</td>
             <td>${r.NVMeCount}/${r.DriveCount}</td>
-            <td>${escapeHtml(r.Datacenter)}</td>
-            <td style="font-weight: 600; color: var(--green);">&euro;${r.Price.toFixed(2)}</td>
+            <td>${escapeHtml(r.Datacenter)}${r.is_ecc ? ' <span class="ecc-badge" title="ECC Memory">ECC</span>' : ''}</td>
+            <td style="font-weight: 600; color: var(--green);">
+                &euro;${r.Price.toFixed(2)}
+                ${r.next_reduce > 0 ? `<div class="next-reduce">-&euro; in ${r.next_reduce}h</div>` : ''}
+            </td>
             <td>${renderScoreBar(r.Score)}</td>
-            <td style="color: var(--text-muted); font-size: 0.8rem;">${formatTime(r.ScannedAt)}</td>
+            <td>${renderDealBadge(r.deal_quality_pct, r.percentile)}</td>
+            <td style="color: var(--text-muted); font-size: 0.8rem;">
+                ${formatTime(r.ScannedAt)}
+                ${r.first_seen ? `<div class="time-on-market">${formatListedAge(r.first_seen)}</div>` : ''}
+            </td>
         </tr>`;
     }).join('');
 }
@@ -332,6 +391,18 @@ function renderScoreBar(score) {
             </div>
         </div>
     `;
+}
+
+function renderDealBadge(qualityPct, percentile) {
+    if (qualityPct === undefined || qualityPct === 0) return '<span style="color: var(--text-muted);">\u2014</span>';
+    const pct = qualityPct.toFixed(0);
+    if (qualityPct >= 20) {
+        return `<span class="deal-badge deal-badge-great">Top deal ${pct}% below</span>`;
+    }
+    if (qualityPct > 0) {
+        return `<span class="deal-badge deal-badge-good">${pct}% below avg</span>`;
+    }
+    return `<span class="deal-badge deal-badge-poor">${Math.abs(pct)}% above avg</span>`;
 }
 
 // --- Refresh countdown ---
@@ -598,7 +669,9 @@ function renderBreakdown(bd) {
         { label: 'NVMe', value: bd.NVMeBonus || 0 },
         { label: 'CPU Gen', value: bd.CPUGenBonus || 0 },
         { label: 'DC', value: bd.LocalityBonus || 0 },
-    ];
+        { label: 'Bench/$', value: bd.BenchmarkPerDollar || 0 },
+        { label: 'ECC', value: bd.ECCBonus || 0 },
+    ].filter(m => m.value > 0 || (m.label !== 'Bench/$' && m.label !== 'ECC'));
 
     const bars = metrics.map(m => {
         const pct = Math.round(m.value * 100);
@@ -827,6 +900,8 @@ async function loadConfig() {
             'NVMe': (cfg.scoring.NVMeWeight * 100).toFixed(0) + '%',
             'CPU Gen': (cfg.scoring.CPUGenWeight * 100).toFixed(0) + '%',
             'Locality': (cfg.scoring.LocalityWeight * 100).toFixed(0) + '%',
+            'Benchmark': (cfg.scoring.BenchmarkWeight * 100).toFixed(0) + '%',
+            'ECC': (cfg.scoring.ECCWeight * 100).toFixed(0) + '%',
         }) + renderConfigSection('Cluster', {
             'CPU (millicores)': cfg.cluster.CPUMillicores,
             'CPU Requested': cfg.cluster.CPURequested,
@@ -879,10 +954,157 @@ function formatTime(ts) {
     return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
 }
 
+function formatListedAge(firstSeen) {
+    if (!firstSeen) return '';
+    const d = new Date(firstSeen);
+    if (isNaN(d.getTime())) return '';
+    const hours = Math.floor((Date.now() - d.getTime()) / 3600000);
+    if (hours < 1) return 'Listed <1h ago';
+    if (hours < 24) return `Listed ${hours}h ago`;
+    return `Listed ${Math.floor(hours / 24)}d ago`;
+}
+
 function updateTimestamp() {
     const el = document.getElementById('last-update');
     const now = new Date();
     el.textContent = `Updated ${now.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+}
+
+// --- Analytics ---
+
+let brandChart = null, dcChart = null, cpuValueChart = null, priceDistChart = null;
+
+async function loadAnalytics() {
+    try {
+        const data = await fetchJSON('/api/analytics');
+        renderBrandChart(data.brand_trends || []);
+        renderDCChart(data.dc_volume || []);
+        renderCPUValueChart(data.top_value_cpus || []);
+        renderPriceDistChart(data.price_buckets || []);
+    } catch (err) {
+        console.error('Failed to load analytics:', err);
+    }
+}
+
+function renderBrandChart(trends) {
+    if (brandChart) brandChart.destroy();
+    const c = getChartColors();
+
+    const dates = [...new Set(trends.map(t => t.date))];
+    const amdData = dates.map(d => {
+        const entry = trends.find(t => t.date === d && t.brand === 'AMD');
+        return entry ? entry.avg_price : null;
+    });
+    const intelData = dates.map(d => {
+        const entry = trends.find(t => t.date === d && t.brand === 'Intel');
+        return entry ? entry.avg_price : null;
+    });
+
+    const ctx = document.getElementById('brand-chart').getContext('2d');
+    brandChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [
+                { label: 'AMD', data: amdData, borderColor: '#ed1c24', backgroundColor: 'rgba(237,28,36,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+                { label: 'Intel', data: intelData, borderColor: '#0071c5', backgroundColor: 'rgba(0,113,197,0.1)', fill: true, tension: 0.3, pointRadius: 2 },
+            ]
+        },
+        options: analyticsChartOptions(c, v => '\u20AC' + v.toFixed(0)),
+    });
+}
+
+function renderDCChart(dcVolume) {
+    if (dcChart) dcChart.destroy();
+    const c = getChartColors();
+
+    const ctx = document.getElementById('dc-chart').getContext('2d');
+    dcChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: dcVolume.map(d => d.datacenter),
+            datasets: [{
+                label: 'Unique Servers',
+                data: dcVolume.map(d => d.count),
+                backgroundColor: c.accent + '80',
+                borderColor: c.accent,
+                borderWidth: 1,
+            }]
+        },
+        options: analyticsChartOptions(c),
+    });
+}
+
+function renderCPUValueChart(cpus) {
+    if (cpuValueChart) cpuValueChart.destroy();
+    const c = getChartColors();
+
+    const ctx = document.getElementById('cpu-value-chart').getContext('2d');
+    cpuValueChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: cpus.map(v => v.cpu.length > 25 ? v.cpu.substring(0, 25) + '...' : v.cpu),
+            datasets: [{
+                label: 'Avg Score',
+                data: cpus.map(v => v.avg_score),
+                backgroundColor: c.green + '80',
+                borderColor: c.green,
+                borderWidth: 1,
+            }]
+        },
+        options: {
+            ...analyticsChartOptions(c),
+            indexAxis: 'y',
+        },
+    });
+}
+
+function renderPriceDistChart(buckets) {
+    if (priceDistChart) priceDistChart.destroy();
+    const c = getChartColors();
+
+    const ctx = document.getElementById('price-dist-chart').getContext('2d');
+    priceDistChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: buckets.map(b => '\u20AC' + b.bucket),
+            datasets: [{
+                label: 'Servers',
+                data: buckets.map(b => b.count),
+                backgroundColor: c.blue + '80',
+                borderColor: c.blue,
+                borderWidth: 1,
+            }]
+        },
+        options: analyticsChartOptions(c),
+    });
+}
+
+function analyticsChartOptions(c, tickCallback) {
+    return {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { labels: { color: c.legend, font: { size: 11 } } },
+            tooltip: {
+                backgroundColor: c.tooltipBg,
+                borderColor: c.tooltipBorder,
+                borderWidth: 1,
+                titleColor: c.tooltipTitle,
+                bodyColor: c.tooltipBody,
+            },
+        },
+        scales: {
+            x: {
+                ticks: { color: c.tick, font: { size: 10 }, maxTicksLimit: 8 },
+                grid: { color: c.grid },
+            },
+            y: {
+                ticks: { color: c.tick, font: { size: 10 }, callback: tickCallback || (v => v) },
+                grid: { color: c.grid },
+            },
+        },
+    };
 }
 
 // --- Init & Auto-Refresh ---

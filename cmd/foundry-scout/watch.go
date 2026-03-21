@@ -78,6 +78,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	// Create scanner and dedup tracker
 	sc := scanner.New(nil)
 	dedup := notify.NewDedupTracker(dedupWindow)
+	var lastDigestSent time.Time
 
 	// Graceful shutdown
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -93,6 +94,11 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	for {
 		if err := watchIteration(ctx, sc, db, cfg, notifier, dedup); err != nil {
 			log.WithError(err).Error("Watch iteration failed")
+		}
+
+		// Check if digest is due
+		if cfg.Digest.Enabled {
+			lastDigestSent = checkAndSendDigest(ctx, db, cfg, notifier, lastDigestSent)
 		}
 
 		if watchOnce {
@@ -116,6 +122,25 @@ func watchIteration(ctx context.Context, sc *scanner.Scanner, db store.Store, cf
 		return fmt.Errorf("fetching: %w", err)
 	}
 
+	// Track all servers for time-on-market analysis (pre-filter)
+	trackerEntries := make([]store.ServerTrackerEntry, len(servers))
+	activeIDs := make([]int, len(servers))
+	for i, srv := range servers {
+		trackerEntries[i] = store.ServerTrackerEntry{
+			ServerID:   srv.ID,
+			CPU:        srv.CPU,
+			Price:      srv.Price,
+			Datacenter: srv.Datacenter,
+		}
+		activeIDs[i] = srv.ID
+	}
+	if err := db.UpsertServerTracker(trackerEntries); err != nil {
+		log.WithError(err).Warn("Failed to upsert server tracker")
+	}
+	if err := db.MarkSoldServers(activeIDs); err != nil {
+		log.WithError(err).Warn("Failed to mark sold servers")
+	}
+
 	// Filter
 	filtered := sc.Filter(servers, cfg.Filters)
 	if len(filtered) == 0 {
@@ -128,6 +153,18 @@ func watchIteration(ctx context.Context, sc *scanner.Scanner, db store.Store, cf
 
 	// Dedup — only notify for new servers
 	newServers := dedup.Filter(scored)
+
+	// Apply minimum score filter for notifications
+	if cfg.Notify.MinScore > 0 {
+		var filtered []scorer.ScoredServer
+		for _, s := range newServers {
+			if s.Score >= cfg.Notify.MinScore {
+				filtered = append(filtered, s)
+			}
+		}
+		newServers = filtered
+	}
+
 	if len(newServers) > 0 {
 		log.WithField("new_servers", len(newServers)).Info("New servers found, sending notification")
 		if err := notifier.Notify(ctx, newServers); err != nil {
@@ -155,4 +192,68 @@ func watchIteration(ctx context.Context, sc *scanner.Scanner, db store.Store, cf
 	}
 
 	return nil
+}
+
+func checkAndSendDigest(ctx context.Context, db store.Store, cfg *config.Config, notifier notify.Notifier, lastSent time.Time) time.Time {
+	var digestInterval time.Duration
+	switch cfg.Digest.Schedule {
+	case "weekly":
+		digestInterval = 7 * 24 * time.Hour
+	default: // "daily"
+		digestInterval = 24 * time.Hour
+	}
+
+	if !lastSent.IsZero() && time.Since(lastSent) < digestInterval {
+		return lastSent
+	}
+
+	since := time.Now().Add(-digestInterval)
+	topN := cfg.Digest.TopN
+	if topN <= 0 {
+		topN = 5
+	}
+
+	deals, err := db.GetTopDeals(since, topN, cfg.Digest.MinScore)
+	if err != nil {
+		log.WithError(err).Warn("Failed to query top deals for digest")
+		return lastSent
+	}
+	if len(deals) == 0 {
+		log.Info("No deals for digest")
+		return time.Now()
+	}
+
+	text := notify.FormatDigest(deals, cfg.Digest.Schedule)
+	// Send digest via the same notifier by wrapping as a ScoredServer list
+	// For simplicity, log the digest and send a minimal notification
+	log.WithFields(log.Fields{
+		"deals":  len(deals),
+		"period": cfg.Digest.Schedule,
+	}).Info("Sending digest notification")
+
+	// Convert top deals to ScoredServer for notifier compatibility
+	digestServers := make([]scorer.ScoredServer, len(deals))
+	for i, d := range deals {
+		digestServers[i] = scorer.ScoredServer{
+			Server: scanner.Server{
+				ID:             d.ServerID,
+				CPU:            d.CPU,
+				RAMSize:        d.RAMSize,
+				TotalStorageTB: d.TotalStorageTB,
+				NVMeCount:      d.NVMeCount,
+				DriveCount:     d.DriveCount,
+				Datacenter:     d.Datacenter,
+				Price:          d.Price,
+			},
+			Score: d.Score,
+		}
+	}
+
+	if err := notifier.Notify(ctx, digestServers); err != nil {
+		log.WithError(err).Error("Digest notification failed")
+		return lastSent
+	}
+
+	_ = text // text is available for channels that support custom formatting
+	return time.Now()
 }

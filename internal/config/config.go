@@ -15,6 +15,7 @@ type Config struct {
 	Notify   Notify   `mapstructure:"notify"`
 	Cluster  Cluster  `mapstructure:"cluster"`
 	Order    Order    `mapstructure:"order"`
+	Digest   Digest   `mapstructure:"digest"`
 }
 
 type Filters struct {
@@ -27,12 +28,14 @@ type Filters struct {
 }
 
 type Scoring struct {
-	CPUWeight      float64 `mapstructure:"cpu_weight"`
-	RAMWeight      float64 `mapstructure:"ram_weight"`
-	StorageWeight  float64 `mapstructure:"storage_weight"`
-	NVMeWeight     float64 `mapstructure:"nvme_weight"`
-	CPUGenWeight   float64 `mapstructure:"cpu_gen_weight"`
-	LocalityWeight float64 `mapstructure:"locality_weight"`
+	CPUWeight       float64 `mapstructure:"cpu_weight"`
+	RAMWeight       float64 `mapstructure:"ram_weight"`
+	StorageWeight   float64 `mapstructure:"storage_weight"`
+	NVMeWeight      float64 `mapstructure:"nvme_weight"`
+	CPUGenWeight    float64 `mapstructure:"cpu_gen_weight"`
+	LocalityWeight  float64 `mapstructure:"locality_weight"`
+	BenchmarkWeight float64 `mapstructure:"benchmark_weight"`
+	ECCWeight       float64 `mapstructure:"ecc_weight"`
 }
 
 type Database struct {
@@ -45,11 +48,29 @@ type Watch struct {
 	DedupWindow string `mapstructure:"dedup_window"`
 }
 
+type WebhookConfig struct {
+	URL     string            `mapstructure:"url"`
+	Headers map[string]string `mapstructure:"headers"`
+}
+
+type TelegramConfig struct {
+	BotToken string `mapstructure:"bot_token"`
+	ChatID   string `mapstructure:"chat_id"`
+}
+
+type NotifyChannel struct {
+	Type string `mapstructure:"type"` // "enclii", "slack", "discord", "webhook", "telegram"
+}
+
 type Notify struct {
-	Type    string        `mapstructure:"type"`
-	Enclii  EncliiConfig  `mapstructure:"enclii"`
-	Slack   SlackConfig   `mapstructure:"slack"`
-	Discord DiscordConfig `mapstructure:"discord"`
+	Type     string          `mapstructure:"type"`
+	Channels []NotifyChannel `mapstructure:"channels"`
+	MinScore float64         `mapstructure:"min_score"`
+	Enclii   EncliiConfig    `mapstructure:"enclii"`
+	Slack    SlackConfig     `mapstructure:"slack"`
+	Discord  DiscordConfig   `mapstructure:"discord"`
+	Webhook  WebhookConfig   `mapstructure:"webhook"`
+	Telegram TelegramConfig  `mapstructure:"telegram"`
 }
 
 type EncliiConfig struct {
@@ -74,6 +95,13 @@ type Cluster struct {
 	DiskGB         int     `mapstructure:"disk_gb"`
 	DiskUsedGB     int     `mapstructure:"disk_used_gb"`
 	Nodes          int     `mapstructure:"nodes"`
+}
+
+type Digest struct {
+	Enabled  bool    `mapstructure:"enabled"`
+	Schedule string  `mapstructure:"schedule"` // "daily" or "weekly"
+	TopN     int     `mapstructure:"top_n"`
+	MinScore float64 `mapstructure:"min_score"`
 }
 
 type Order struct {
@@ -102,6 +130,8 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("scoring.nvme_weight", 0.10)
 	v.SetDefault("scoring.cpu_gen_weight", 0.10)
 	v.SetDefault("scoring.locality_weight", 0.05)
+	v.SetDefault("scoring.benchmark_weight", 0.0)
+	v.SetDefault("scoring.ecc_weight", 0.0)
 
 	v.SetDefault("database.path", "foundry-scout.db")
 	v.SetDefault("database.retention_days", 90)
@@ -121,6 +151,11 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("order.min_score", 90)
 	v.SetDefault("order.max_price_eur", 80)
 	v.SetDefault("order.require_approval", true)
+
+	v.SetDefault("digest.enabled", false)
+	v.SetDefault("digest.schedule", "daily")
+	v.SetDefault("digest.top_n", 5)
+	v.SetDefault("digest.min_score", 0)
 
 	if path != "" {
 		v.SetConfigFile(path)

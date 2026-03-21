@@ -58,6 +58,7 @@
             <button class="active" data-panel="deals">Live Deals</button>
             <button data-panel="history">Price History</button>
             <button data-panel="orders">Order Log</button>
+            <button data-panel="analytics">Analytics</button>
             <button data-panel="config">Config</button>
         </div>
     </nav>
@@ -82,7 +83,11 @@
                     <label class="filter-toggle">
                         <input type="checkbox" id="filter-nvme"> NVMe only
                     </label>
+                    <label class="filter-toggle">
+                        <input type="checkbox" id="filter-ecc"> ECC only
+                    </label>
                     <div class="filter-actions">
+                        <button class="export-btn" onclick="shareFilters()" title="Copy shareable URL">Share</button>
                         <button class="export-btn" onclick="exportData('csv')" title="Export CSV">CSV</button>
                         <button class="export-btn" onclick="exportData('json')" title="Export JSON">JSON</button>
                     </div>
@@ -100,6 +105,7 @@
                                 <th class="sortable" data-sort="Datacenter">DC</th>
                                 <th class="sortable" data-sort="Price">Price</th>
                                 <th class="sortable" data-sort="Score">Score</th>
+                                <th class="sortable" data-sort="DealQualityPct">Deal</th>
                                 <th class="sortable" data-sort="ScannedAt">Scanned</th>
                             </tr>
                         </thead>
@@ -144,6 +150,30 @@
                             </thead>
                             <tbody id="orders-table"></tbody>
                         </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Analytics Panel -->
+        <div id="panel-analytics" class="panel">
+            <div class="container">
+                <div class="analytics-grid">
+                    <div class="chart-card">
+                        <div class="card-title">AMD vs Intel — Avg Price (14d)</div>
+                        <div class="chart-container-sm"><canvas id="brand-chart"></canvas></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="card-title">Datacenter Distribution (7d)</div>
+                        <div class="chart-container-sm"><canvas id="dc-chart"></canvas></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="card-title">Top Value CPUs (7d)</div>
+                        <div class="chart-container-sm"><canvas id="cpu-value-chart"></canvas></div>
+                    </div>
+                    <div class="chart-card">
+                        <div class="card-title">Price Distribution (24h)</div>
+                        <div class="chart-container-sm"><canvas id="price-dist-chart"></canvas></div>
                     </div>
                 </div>
             </div>

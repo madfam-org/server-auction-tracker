@@ -874,6 +874,93 @@ canvas {
     to { transform: translateY(0); opacity: 1; }
 }
 
+/* Deal badges */
+.deal-badge {
+    display: inline-block;
+    padding: 0.15rem 0.5rem;
+    border-radius: 0.25rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.deal-badge-great {
+    background: var(--green-dim);
+    color: var(--green);
+}
+
+.deal-badge-good {
+    background: var(--blue-dim);
+    color: var(--blue);
+}
+
+.deal-badge-poor {
+    background: var(--red-dim);
+    color: var(--red);
+}
+
+/* Time on market */
+.time-on-market {
+    font-size: 0.65rem;
+    color: var(--accent);
+    margin-top: 0.15rem;
+}
+
+/* ECC badge */
+.ecc-badge {
+    display: inline-block;
+    padding: 0.1rem 0.35rem;
+    border-radius: 0.2rem;
+    font-size: 0.6rem;
+    font-weight: 700;
+    background: var(--blue-dim);
+    color: var(--blue);
+    vertical-align: middle;
+    margin-left: 0.25rem;
+}
+
+/* Next price reduce */
+.next-reduce {
+    font-size: 0.65rem;
+    font-weight: 400;
+    color: var(--accent);
+    margin-top: 0.1rem;
+}
+
+/* Analytics grid */
+.analytics-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+}
+
+.chart-card {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 0.75rem;
+    padding: 1.25rem;
+}
+
+.chart-card .card-title {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-muted);
+    margin-bottom: 0.75rem;
+}
+
+.chart-container-sm {
+    position: relative;
+    min-height: 220px;
+}
+
+.chart-container-sm canvas {
+    width: 100% !important;
+    height: 200px !important;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
     .stats-row {
@@ -898,5 +985,8 @@ canvas {
     }
     .filter-actions {
         margin-left: 0;
+    }
+    .analytics-grid {
+        grid-template-columns: 1fr;
     }
 }

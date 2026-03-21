@@ -123,3 +123,108 @@ func TestScoreLocalityBonus(t *testing.T) {
 	result = Score(servers, scoring, "FSN1")
 	assert.Equal(t, 0.0, result[0].Breakdown.LocalityBonus)
 }
+
+func TestScoreWithBenchmark(t *testing.T) {
+	servers := []scanner.Server{
+		{
+			ID: 1, CPU: "AMD Ryzen 5 3600 6-Core Processor", CPUCount: 1,
+			RAMSize: 64, Price: 39.00, Datacenter: "HEL1-DC7",
+			DriveCount: 2, NVMeCount: 2, TotalStorageTB: 1.0,
+			ParsedCores: 6, ParsedThreads: 12,
+		},
+	}
+
+	// With benchmark weight enabled
+	scoring := config.Scoring{
+		CPUWeight:       0.25,
+		RAMWeight:       0.20,
+		StorageWeight:   0.15,
+		NVMeWeight:      0.10,
+		CPUGenWeight:    0.10,
+		LocalityWeight:  0.05,
+		BenchmarkWeight: 0.15,
+	}
+
+	result := Score(servers, scoring, "HEL1")
+	require.Len(t, result, 1)
+	assert.Greater(t, result[0].Score, 0.0)
+	assert.Greater(t, result[0].Breakdown.BenchmarkPerDollar, 0.0,
+		"should have non-zero benchmark component")
+}
+
+func TestECCScoring(t *testing.T) {
+	servers := []scanner.Server{
+		{
+			ID: 1, CPU: "AMD EPYC 7443P", CPUCount: 1,
+			RAMSize: 256, Price: 120.00, Datacenter: "HEL1",
+			DriveCount: 4, NVMeCount: 4, TotalStorageTB: 7.68,
+			ParsedCores: 24, ParsedThreads: 48,
+			IsECC: true,
+		},
+		{
+			ID: 2, CPU: "AMD EPYC 7443P", CPUCount: 1,
+			RAMSize: 256, Price: 120.00, Datacenter: "HEL1",
+			DriveCount: 4, NVMeCount: 4, TotalStorageTB: 7.68,
+			ParsedCores: 24, ParsedThreads: 48,
+			IsECC: false,
+		},
+	}
+
+	// With ECC weight
+	scoring := config.Scoring{
+		CPUWeight:      0.25,
+		RAMWeight:      0.20,
+		StorageWeight:  0.15,
+		NVMeWeight:     0.10,
+		CPUGenWeight:   0.10,
+		LocalityWeight: 0.05,
+		ECCWeight:      0.15,
+	}
+
+	result := Score(servers, scoring, "HEL1")
+	require.Len(t, result, 2)
+
+	// ECC server should score higher
+	var eccServer, nonECC *ScoredServer
+	for i := range result {
+		if result[i].Server.IsECC {
+			eccServer = &result[i]
+		} else {
+			nonECC = &result[i]
+		}
+	}
+	require.NotNil(t, eccServer)
+	require.NotNil(t, nonECC)
+	assert.Greater(t, eccServer.Score, nonECC.Score)
+	assert.Equal(t, 1.0, eccServer.Breakdown.ECCBonus)
+	assert.Equal(t, 0.0, nonECC.Breakdown.ECCBonus)
+}
+
+func TestScoreBackwardCompat(t *testing.T) {
+	servers := []scanner.Server{
+		{
+			ID: 1, CPU: "AMD Ryzen 5 3600 6-Core Processor", CPUCount: 1,
+			RAMSize: 64, Price: 39.00, Datacenter: "HEL1-DC7",
+			DriveCount: 2, NVMeCount: 2, TotalStorageTB: 1.0,
+			ParsedCores: 6, ParsedThreads: 12,
+		},
+	}
+
+	// Default weights (BenchmarkWeight = 0) — no change to behavior
+	scoringDefault := config.Scoring{
+		CPUWeight:       0.30,
+		RAMWeight:       0.25,
+		StorageWeight:   0.20,
+		NVMeWeight:      0.10,
+		CPUGenWeight:    0.10,
+		LocalityWeight:  0.05,
+		BenchmarkWeight: 0.0,
+	}
+
+	result := Score(servers, scoringDefault, "HEL1")
+	require.Len(t, result, 1)
+	// Benchmark weight is 0, so benchmark component should not affect score
+	// But BenchmarkPerDollar should still be computed for display
+	assert.Greater(t, result[0].Breakdown.BenchmarkPerDollar, 0.0,
+		"benchmark per dollar should still be computed")
+}

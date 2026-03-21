@@ -149,7 +149,7 @@ func TestLatestEndpoint(t *testing.T) {
 	s.handleLatest(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var records []store.ScanRecord
+	var records []enrichedRecord
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &records))
 	assert.Len(t, records, 2)
 }
@@ -568,7 +568,7 @@ func TestBreakdownInLatest(t *testing.T) {
 	s.handleLatest(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
-	var records []store.ScanRecord
+	var records []enrichedRecord
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &records))
 	require.Len(t, records, 2)
 
@@ -581,4 +581,95 @@ func TestBreakdownInLatest(t *testing.T) {
 	// The first record (by scanned_at desc) could be either server —
 	// just verify the breakdown has non-zero values
 	assert.True(t, bd.CPUPerDollar > 0 || bd.RAMPerDollar > 0)
+}
+
+func TestDealQualityEnrichment(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Save multiple scans at different prices for the same CPU
+	for _, price := range []float64{30.0, 40.0, 50.0, 60.0, 70.0} {
+		servers := []scorer.ScoredServer{{
+			Server: scanner.Server{
+				ID: int(price * 100), CPU: "AMD Ryzen 5 3600", RAMSize: 64,
+				TotalStorageTB: 1.0, NVMeCount: 2, DriveCount: 2,
+				Datacenter: "HEL1", Price: price,
+			},
+			Score: 80,
+		}}
+		require.NoError(t, s.store.SaveScan(servers))
+	}
+
+	req := httptest.NewRequest("GET", "/api/latest?limit=10", nil)
+	w := httptest.NewRecorder()
+	s.handleLatest(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var records []enrichedRecord
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &records))
+	require.NotEmpty(t, records)
+
+	// The cheapest server ($30) should have positive deal quality
+	// The most expensive ($70) should have negative deal quality
+	var cheapest, expensive *enrichedRecord
+	for i := range records {
+		if records[i].Price == 30.0 {
+			cheapest = &records[i]
+		}
+		if records[i].Price == 70.0 {
+			expensive = &records[i]
+		}
+	}
+
+	require.NotNil(t, cheapest, "should find $30 server")
+	require.NotNil(t, expensive, "should find $70 server")
+	assert.Greater(t, cheapest.DealQualityPct, 0.0, "cheap server should be below avg")
+	assert.Less(t, expensive.DealQualityPct, 0.0, "expensive server should be above avg")
+	assert.Greater(t, cheapest.Percentile, expensive.Percentile, "cheap server should have better percentile")
+}
+
+func TestAnalyticsEndpoint(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	seedTestData(t, s.store)
+
+	req := httptest.NewRequest("GET", "/api/analytics", nil)
+	w := httptest.NewRecorder()
+	s.handleAnalytics(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var analytics store.MarketAnalytics
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &analytics))
+	// Should have data from seeded records
+	assert.NotEmpty(t, analytics.BrandTrends)
+}
+
+func TestAnalyticsEndpointEmpty(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	req := httptest.NewRequest("GET", "/api/analytics", nil)
+	w := httptest.NewRecorder()
+	s.handleAnalytics(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+
+	var analytics store.MarketAnalytics
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &analytics))
+	assert.Empty(t, analytics.BrandTrends)
+	assert.Empty(t, analytics.DCVolume)
+}
+
+func TestComputePercentile(t *testing.T) {
+	// Cheapest possible price -> 100th percentile
+	assert.Equal(t, 100, computePercentile(30, 30, 70))
+	// Most expensive -> 0th percentile
+	assert.Equal(t, 0, computePercentile(70, 30, 70))
+	// Middle price -> 50th percentile
+	assert.Equal(t, 50, computePercentile(50, 30, 70))
+	// Equal min/max -> 50 (edge case)
+	assert.Equal(t, 50, computePercentile(50, 50, 50))
 }

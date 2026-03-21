@@ -66,6 +66,17 @@ func TestParseCoreCountFromString(t *testing.T) {
 	assert.Equal(t, 12, info.Threads)
 }
 
+func TestParseBenchmarkScore(t *testing.T) {
+	info := Parse("AMD Ryzen 5 3600 6-Core Processor", 6, 12, 0)
+	assert.Greater(t, info.BenchmarkScore, 0, "should have benchmark score")
+	assert.Equal(t, 17823, info.BenchmarkScore)
+}
+
+func TestParseBenchmarkUnknownCPU(t *testing.T) {
+	info := Parse("Some Custom CPU", 4, 8, 0)
+	assert.Equal(t, 0, info.BenchmarkScore)
+}
+
 func TestGenerationScore(t *testing.T) {
 	tests := []struct {
 		gen      int

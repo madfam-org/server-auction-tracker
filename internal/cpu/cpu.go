@@ -7,12 +7,13 @@ import (
 )
 
 type Info struct {
-	Model      string
-	Brand      string // "AMD" or "Intel"
-	Generation int
-	Cores      int
-	Threads    int
-	BaseGHz    float64
+	Model          string
+	Brand          string // "AMD" or "Intel"
+	Generation     int
+	Cores          int
+	Threads        int
+	BaseGHz        float64
+	BenchmarkScore int
 }
 
 var (
@@ -45,6 +46,9 @@ func Parse(model string, cores, threads int, benchmarkScore int) Info {
 		threads = cores * 2 // SMT/HT default
 	}
 	info.Threads = threads
+
+	score, _ := LookupBenchmark(model)
+	info.BenchmarkScore = score
 
 	return info
 }

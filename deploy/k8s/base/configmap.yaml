@@ -16,12 +16,14 @@ data:
       datacenter_prefix: "HEL1"
 
     scoring:
-      cpu_weight: 0.30
-      ram_weight: 0.25
-      storage_weight: 0.20
+      cpu_weight: 0.25
+      ram_weight: 0.20
+      storage_weight: 0.15
       nvme_weight: 0.10
       cpu_gen_weight: 0.10
       locality_weight: 0.05
+      benchmark_weight: 0.10
+      ecc_weight: 0.05
 
     database:
       path: "/data/foundry-scout.db"
@@ -49,3 +51,9 @@ data:
 
     order:
       enabled: false
+
+    digest:
+      enabled: false
+      schedule: "daily"
+      top_n: 5
+      min_score: 70
