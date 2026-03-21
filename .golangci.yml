@@ -10,6 +10,25 @@ linters:
     - gocritic
 
   settings:
+    errcheck:
+      exclude-functions:
+        # Standard defer cleanup patterns — errors are non-actionable
+        - (io.Closer).Close
+        - (*database/sql.Rows).Close
+        - (*database/sql.Stmt).Close
+        - (*database/sql.DB).Close
+        - (*os.File).Close
+        - (net/http.ResponseWriter).Write
+        # fmt writes to stdout/ResponseWriter — non-actionable
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - fmt.Printf
+        - fmt.Println
+        # Encoder/tabwriter writes to ResponseWriter
+        - (*encoding/json.Encoder).Encode
+        - (*text/tabwriter.Writer).Flush
+        # Cleanup in tests — non-actionable
+        - os.RemoveAll
     gocritic:
       enabled-tags:
         - diagnostic

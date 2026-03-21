@@ -83,8 +83,8 @@ func runHistory(cmd *cobra.Command, args []string) error {
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "DATE\tSERVER\tCPU\tRAM\tPRICE\tDEAL\tSCORE\tDC")   //nolint:errcheck
-	fmt.Fprintln(w, "----\t------\t---\t---\t-----\t----\t-----\t--") //nolint:errcheck
+	fmt.Fprintln(w, "DATE\tSERVER\tCPU\tRAM\tPRICE\tDEAL\tSCORE\tDC")
+	fmt.Fprintln(w, "----\t------\t---\t---\t-----\t----\t-----\t--")
 	for _, r := range records {
 		deal := dealQuality(r, allStats)
 		fmt.Fprintf(w, "%s\t%d\t%s\t%dGB\t€%.2f\t%s\t%.1f\t%s\n",
@@ -98,7 +98,7 @@ func runHistory(cmd *cobra.Command, args []string) error {
 			r.Datacenter,
 		)
 	}
-	w.Flush() //nolint:errcheck
+	w.Flush()
 	fmt.Printf("\n%d records shown.\n", len(records))
 	return nil
 }

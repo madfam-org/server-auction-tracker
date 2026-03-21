@@ -262,9 +262,9 @@ func (s *server) handleExport(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/csv")
 		w.Header().Set("Content-Disposition", "attachment; filename=deal-sniper-export.csv")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprintln(w, "ServerID,CPU,RAM_GB,Storage_TB,NVMe,Drives,Datacenter,Price_EUR,Score,ScannedAt") //nolint:errcheck
+		fmt.Fprintln(w, "ServerID,CPU,RAM_GB,Storage_TB,NVMe,Drives,Datacenter,Price_EUR,Score,ScannedAt")
 		for _, r := range records {
-			fmt.Fprintf(w, "%d,%q,%d,%.2f,%d,%d,%q,%.2f,%.1f,%s\n", //nolint:errcheck
+			fmt.Fprintf(w, "%d,%q,%d,%.2f,%d,%d,%q,%.2f,%.1f,%s\n",
 				r.ServerID, r.CPU, r.RAMSize, r.TotalStorageTB,
 				r.NVMeCount, r.DriveCount, r.Datacenter,
 				r.Price, r.Score, r.ScannedAt.Format(time.RFC3339))
@@ -314,19 +314,18 @@ func (s *server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	//nolint:errcheck // Prometheus text format writes to ResponseWriter — errors are non-actionable
 	fmt.Fprintf(w, "# HELP deal_sniper_deals_total Number of tracked deals\n")
-	fmt.Fprintf(w, "# TYPE deal_sniper_deals_total gauge\n")                  //nolint:errcheck
-	fmt.Fprintf(w, "deal_sniper_deals_total %d\n", total)                     //nolint:errcheck
-	fmt.Fprintf(w, "# HELP deal_sniper_avg_price_eur Average deal price in EUR\n") //nolint:errcheck
-	fmt.Fprintf(w, "# TYPE deal_sniper_avg_price_eur gauge\n")                //nolint:errcheck
-	fmt.Fprintf(w, "deal_sniper_avg_price_eur %.2f\n", avgPrice)              //nolint:errcheck
-	fmt.Fprintf(w, "# HELP deal_sniper_best_score Highest deal score\n")      //nolint:errcheck
-	fmt.Fprintf(w, "# TYPE deal_sniper_best_score gauge\n")                   //nolint:errcheck
-	fmt.Fprintf(w, "deal_sniper_best_score %.1f\n", bestScore)                //nolint:errcheck
-	fmt.Fprintf(w, "# HELP deal_sniper_last_scan_unix Timestamp of last scan in unix epoch\n") //nolint:errcheck
-	fmt.Fprintf(w, "# TYPE deal_sniper_last_scan_unix gauge\n")               //nolint:errcheck
-	fmt.Fprintf(w, "deal_sniper_last_scan_unix %d\n", lastScan.Unix())        //nolint:errcheck
+	fmt.Fprintf(w, "# TYPE deal_sniper_deals_total gauge\n")
+	fmt.Fprintf(w, "deal_sniper_deals_total %d\n", total)
+	fmt.Fprintf(w, "# HELP deal_sniper_avg_price_eur Average deal price in EUR\n")
+	fmt.Fprintf(w, "# TYPE deal_sniper_avg_price_eur gauge\n")
+	fmt.Fprintf(w, "deal_sniper_avg_price_eur %.2f\n", avgPrice)
+	fmt.Fprintf(w, "# HELP deal_sniper_best_score Highest deal score\n")
+	fmt.Fprintf(w, "# TYPE deal_sniper_best_score gauge\n")
+	fmt.Fprintf(w, "deal_sniper_best_score %.1f\n", bestScore)
+	fmt.Fprintf(w, "# HELP deal_sniper_last_scan_unix Timestamp of last scan in unix epoch\n")
+	fmt.Fprintf(w, "# TYPE deal_sniper_last_scan_unix gauge\n")
+	fmt.Fprintf(w, "deal_sniper_last_scan_unix %d\n", lastScan.Unix())
 }
 
 // --- helpers ---
