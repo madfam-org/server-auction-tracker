@@ -141,7 +141,7 @@ func TestRunScanWithMockServer(t *testing.T) {
 	// Override cfgFile
 	oldCfg := cfgFile
 	cfgFile = configPath
-	defer func() { cfgFile = oldCfg }()
+	t.Cleanup(func() { cfgFile = oldCfg })
 
 	// We can't easily override the scanner URL in runScan without refactoring,
 	// so we test the printResults path instead which is the main output path

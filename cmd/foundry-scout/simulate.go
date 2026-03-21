@@ -46,7 +46,7 @@ func runSimulate(cmd *cobra.Command, args []string) error {
 	// Estimate current monthly cost from cluster config
 	// (simple heuristic: divide by nodes for per-node cost isn't available,
 	//  so we use 0 and let the user see the increment)
-	result := simulate.Simulate(cfg.Cluster, *server, 0)
+	result := simulate.Simulate(&cfg.Cluster, server, 0)
 	printSimulationResult(result)
 	return nil
 }
@@ -75,7 +75,7 @@ func findServer(cfg *config.Config, serverID int) (*scanner.Server, error) {
 		}
 		return nil, fmt.Errorf("server %d not in auction, and db open failed: %w", serverID, dbErr)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	if initErr := db.Init(); initErr != nil {
 		return nil, fmt.Errorf("initializing database: %w", initErr)

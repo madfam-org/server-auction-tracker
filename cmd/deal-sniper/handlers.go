@@ -15,7 +15,7 @@ import (
 
 // scanRecordToServer converts a ScanRecord back into a scanner.Server
 // with enough data for the simulate package.
-func scanRecordToServer(r store.ScanRecord) scanner.Server {
+func scanRecordToServer(r *store.ScanRecord) scanner.Server {
 	return scanner.Server{
 		ID:             r.ServerID,
 		CPU:            r.CPU,
@@ -109,7 +109,7 @@ func (s *server) handleOrderCheck(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	check := s.orderer.CheckEligibility(*srv, score, s.config.Order)
+	check := s.orderer.CheckEligibility(srv, score, &s.config.Order)
 
 	writeJSON(w, http.StatusOK, orderCheckResponse{
 		Eligible:  check.Eligible,
@@ -140,7 +140,7 @@ func (s *server) handleOrderConfirm(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	check := s.orderer.CheckEligibility(*srv, score, s.config.Order)
+	check := s.orderer.CheckEligibility(srv, score, &s.config.Order)
 	if !check.Eligible {
 		writeJSON(w, http.StatusOK, orderConfirmResponse{
 			Success: false,
@@ -182,7 +182,7 @@ func (s *server) fetchAndScoreServer(serverID int) (*scanner.Server, float64, *s
 		return nil, 0, nil, fmt.Errorf("server %d not found in recent scans", serverID)
 	}
 
-	srv := scanRecordToServer(*rec)
+	srv := scanRecordToServer(rec)
 	var bd scorer.Breakdown
 	if rec.BreakdownJSON != "" && rec.BreakdownJSON != "{}" {
 		json.Unmarshal([]byte(rec.BreakdownJSON), &bd) //nolint:errcheck

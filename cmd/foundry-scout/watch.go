@@ -59,7 +59,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	}
 
 	// Initialize notifier
-	notifier, err := notify.NewNotifier(cfg.Notify)
+	notifier, err := notify.NewNotifier(&cfg.Notify)
 	if err != nil {
 		return fmt.Errorf("creating notifier: %w", err)
 	}
@@ -69,7 +69,7 @@ func runWatch(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("opening database: %w", err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	if err := db.Init(); err != nil {
 		return fmt.Errorf("initializing database: %w", err)
@@ -125,14 +125,14 @@ func watchIteration(ctx context.Context, sc *scanner.Scanner, db store.Store, cf
 	// Track all servers for time-on-market analysis (pre-filter)
 	trackerEntries := make([]store.ServerTrackerEntry, len(servers))
 	activeIDs := make([]int, len(servers))
-	for i, srv := range servers {
+	for i := range servers {
 		trackerEntries[i] = store.ServerTrackerEntry{
-			ServerID:   srv.ID,
-			CPU:        srv.CPU,
-			Price:      srv.Price,
-			Datacenter: srv.Datacenter,
+			ServerID:   servers[i].ID,
+			CPU:        servers[i].CPU,
+			Price:      servers[i].Price,
+			Datacenter: servers[i].Datacenter,
 		}
-		activeIDs[i] = srv.ID
+		activeIDs[i] = servers[i].ID
 	}
 	if err := db.UpsertServerTracker(trackerEntries); err != nil {
 		log.WithError(err).Warn("Failed to upsert server tracker")
@@ -157,9 +157,9 @@ func watchIteration(ctx context.Context, sc *scanner.Scanner, db store.Store, cf
 	// Apply minimum score filter for notifications
 	if cfg.Notify.MinScore > 0 {
 		var filtered []scorer.ScoredServer
-		for _, s := range newServers {
-			if s.Score >= cfg.Notify.MinScore {
-				filtered = append(filtered, s)
+		for i := range newServers {
+			if newServers[i].Score >= cfg.Notify.MinScore {
+				filtered = append(filtered, newServers[i])
 			}
 		}
 		newServers = filtered

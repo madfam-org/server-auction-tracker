@@ -26,9 +26,9 @@ type Result struct {
 }
 
 // Simulate calculates the impact of adding a server to the cluster.
-func Simulate(cluster config.Cluster, server scanner.Server, currentMonthlyCost float64) *Result {
+func Simulate(cluster *config.Cluster, server *scanner.Server, currentMonthlyCost float64) *Result {
 	r := &Result{
-		Server:      server,
+		Server:      *server,
 		NodesBefore: cluster.Nodes,
 		NodesAfter:  cluster.Nodes + 1,
 	}

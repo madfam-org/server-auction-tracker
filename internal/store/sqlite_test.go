@@ -17,7 +17,7 @@ func setupTestDB(t *testing.T) *SQLiteStore {
 	s, err := NewSQLite(dbPath)
 	require.NoError(t, err)
 	require.NoError(t, s.Init())
-	t.Cleanup(func() { s.Close() })
+	t.Cleanup(func() { _ = s.Close() })
 	return s
 }
 

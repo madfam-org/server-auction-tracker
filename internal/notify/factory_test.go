@@ -13,7 +13,7 @@ func TestNewNotifierEnclii(t *testing.T) {
 		Type:   "enclii",
 		Enclii: config.EncliiConfig{APIURL: "http://switchyard.local"},
 	}
-	n, err := NewNotifier(cfg)
+	n, err := NewNotifier(&cfg)
 	require.NoError(t, err)
 	assert.IsType(t, &EncliiNotifier{}, n)
 }
@@ -23,7 +23,7 @@ func TestNewNotifierSlack(t *testing.T) {
 		Type:  "slack",
 		Slack: config.SlackConfig{WebhookURL: "https://hooks.slack.com/test"},
 	}
-	n, err := NewNotifier(cfg)
+	n, err := NewNotifier(&cfg)
 	require.NoError(t, err)
 	assert.IsType(t, &SlackNotifier{}, n)
 }
@@ -33,21 +33,21 @@ func TestNewNotifierDiscord(t *testing.T) {
 		Type:    "discord",
 		Discord: config.DiscordConfig{WebhookURL: "https://discord.com/api/webhooks/test"},
 	}
-	n, err := NewNotifier(cfg)
+	n, err := NewNotifier(&cfg)
 	require.NoError(t, err)
 	assert.IsType(t, &DiscordNotifier{}, n)
 }
 
 func TestNewNotifierSlackMissingURL(t *testing.T) {
 	cfg := config.Notify{Type: "slack"}
-	_, err := NewNotifier(cfg)
+	_, err := NewNotifier(&cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "webhook_url is required")
 }
 
 func TestNewNotifierUnknownType(t *testing.T) {
 	cfg := config.Notify{Type: "carrier_pigeon"}
-	_, err := NewNotifier(cfg)
+	_, err := NewNotifier(&cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown notifier type")
 }
@@ -57,7 +57,7 @@ func TestNewNotifierWebhook(t *testing.T) {
 		Type:    "webhook",
 		Webhook: config.WebhookConfig{URL: "https://example.com/hook"},
 	}
-	n, err := NewNotifier(cfg)
+	n, err := NewNotifier(&cfg)
 	require.NoError(t, err)
 	assert.IsType(t, &WebhookNotifier{}, n)
 }
@@ -67,14 +67,14 @@ func TestNewNotifierTelegram(t *testing.T) {
 		Type:     "telegram",
 		Telegram: config.TelegramConfig{BotToken: "123:ABC", ChatID: "-100123"},
 	}
-	n, err := NewNotifier(cfg)
+	n, err := NewNotifier(&cfg)
 	require.NoError(t, err)
 	assert.IsType(t, &TelegramNotifier{}, n)
 }
 
 func TestNewNotifierTelegramMissing(t *testing.T) {
 	cfg := config.Notify{Type: "telegram"}
-	_, err := NewNotifier(cfg)
+	_, err := NewNotifier(&cfg)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "bot_token and chat_id")
 }
@@ -88,7 +88,7 @@ func TestNewNotifierMultiChannel(t *testing.T) {
 		Slack:   config.SlackConfig{WebhookURL: "https://hooks.slack.com/test"},
 		Discord: config.DiscordConfig{WebhookURL: "https://discord.com/api/webhooks/test"},
 	}
-	n, err := NewNotifier(cfg)
+	n, err := NewNotifier(&cfg)
 	require.NoError(t, err)
 	assert.IsType(t, &MultiNotifier{}, n)
 }
@@ -100,7 +100,7 @@ func TestNewNotifierSingleChannel(t *testing.T) {
 		},
 		Slack: config.SlackConfig{WebhookURL: "https://hooks.slack.com/test"},
 	}
-	n, err := NewNotifier(cfg)
+	n, err := NewNotifier(&cfg)
 	require.NoError(t, err)
 	// Single channel should unwrap to the underlying notifier
 	assert.IsType(t, &SlackNotifier{}, n)
@@ -112,7 +112,7 @@ func TestBackwardCompatSingleType(t *testing.T) {
 		Type:   "enclii",
 		Enclii: config.EncliiConfig{APIURL: "http://switchyard.local"},
 	}
-	n, err := NewNotifier(cfg)
+	n, err := NewNotifier(&cfg)
 	require.NoError(t, err)
 	assert.IsType(t, &EncliiNotifier{}, n)
 }

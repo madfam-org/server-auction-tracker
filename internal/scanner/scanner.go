@@ -186,11 +186,11 @@ func estimateCoresFromModel(model string) int {
 
 func (s *Scanner) Filter(servers []Server, filters config.Filters) []Server {
 	var result []Server
-	for _, srv := range servers {
-		if !passesFilters(srv, filters) {
+	for i := range servers {
+		if !passesFilters(&servers[i], &filters) {
 			continue
 		}
-		result = append(result, srv)
+		result = append(result, servers[i])
 	}
 	log.WithFields(log.Fields{
 		"total":    len(servers),
@@ -199,7 +199,7 @@ func (s *Scanner) Filter(servers []Server, filters config.Filters) []Server {
 	return result
 }
 
-func passesFilters(s Server, f config.Filters) bool {
+func passesFilters(s *Server, f *config.Filters) bool {
 	if s.RAMSize < f.MinRAMGB {
 		return false
 	}

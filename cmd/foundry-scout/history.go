@@ -39,7 +39,7 @@ func runHistory(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("opening database: %w", err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	if err := db.Init(); err != nil {
 		return fmt.Errorf("initializing database: %w", err)
@@ -85,17 +85,17 @@ func runHistory(cmd *cobra.Command, args []string) error {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(w, "DATE\tSERVER\tCPU\tRAM\tPRICE\tDEAL\tSCORE\tDC")
 	fmt.Fprintln(w, "----\t------\t---\t---\t-----\t----\t-----\t--")
-	for _, r := range records {
-		deal := dealQuality(r, allStats)
+	for i := range records {
+		deal := dealQuality(&records[i], allStats)
 		fmt.Fprintf(w, "%s\t%d\t%s\t%dGB\t€%.2f\t%s\t%.1f\t%s\n",
-			r.ScannedAt.Format("2006-01-02 15:04"),
-			r.ServerID,
-			truncate(r.CPU, 25),
-			r.RAMSize,
-			r.Price,
+			records[i].ScannedAt.Format("2006-01-02 15:04"),
+			records[i].ServerID,
+			truncate(records[i].CPU, 25),
+			records[i].RAMSize,
+			records[i].Price,
 			deal,
-			r.Score,
-			r.Datacenter,
+			records[i].Score,
+			records[i].Datacenter,
 		)
 	}
 	w.Flush()
@@ -105,7 +105,7 @@ func runHistory(cmd *cobra.Command, args []string) error {
 
 // dealQuality returns a percentage indicator showing how a server's price
 // compares to the average for that CPU model. Negative = below avg (good deal).
-func dealQuality(r store.ScanRecord, allStats map[string]*store.PriceStats) string {
+func dealQuality(r *store.ScanRecord, allStats map[string]*store.PriceStats) string {
 	stats, ok := allStats[r.CPU]
 	if !ok || stats.AvgPrice == 0 {
 		return "—"

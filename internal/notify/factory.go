@@ -8,14 +8,14 @@ import (
 
 // NewNotifier creates a Notifier based on the configured type.
 // If Channels is populated, builds a MultiNotifier. Otherwise falls back to Type.
-func NewNotifier(cfg config.Notify) (Notifier, error) {
+func NewNotifier(cfg *config.Notify) (Notifier, error) {
 	if len(cfg.Channels) > 0 {
 		return buildMultiNotifier(cfg)
 	}
 	return buildSingleNotifier(cfg.Type, cfg)
 }
 
-func buildMultiNotifier(cfg config.Notify) (Notifier, error) {
+func buildMultiNotifier(cfg *config.Notify) (Notifier, error) {
 	var notifiers []Notifier
 	for _, ch := range cfg.Channels {
 		n, err := buildSingleNotifier(ch.Type, cfg)
@@ -33,7 +33,7 @@ func buildMultiNotifier(cfg config.Notify) (Notifier, error) {
 	return NewMultiNotifier(notifiers...), nil
 }
 
-func buildSingleNotifier(typ string, cfg config.Notify) (Notifier, error) {
+func buildSingleNotifier(typ string, cfg *config.Notify) (Notifier, error) {
 	switch typ {
 	case "enclii":
 		if cfg.Enclii.APIURL == "" {

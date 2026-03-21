@@ -45,8 +45,8 @@ func TestScoreSingleServer(t *testing.T) {
 	require.Len(t, result, 1)
 	assert.Greater(t, result[0].Score, 0.0)
 	assert.LessOrEqual(t, result[0].Score, 100.0)
-	assert.Equal(t, 1.0, result[0].Breakdown.LocalityBonus)
-	assert.Equal(t, 1.0, result[0].Breakdown.NVMeBonus)
+	assert.Equal(t, 1.0, result[0].LocalityBonus)
+	assert.Equal(t, 1.0, result[0].NVMeBonus)
 }
 
 func TestScoreOrdering(t *testing.T) {
@@ -117,11 +117,11 @@ func TestScoreLocalityBonus(t *testing.T) {
 
 	// With matching prefix
 	result := Score(servers, scoring, "HEL1")
-	assert.Equal(t, 1.0, result[0].Breakdown.LocalityBonus)
+	assert.Equal(t, 1.0, result[0].LocalityBonus)
 
 	// Without matching prefix
 	result = Score(servers, scoring, "FSN1")
-	assert.Equal(t, 0.0, result[0].Breakdown.LocalityBonus)
+	assert.Equal(t, 0.0, result[0].LocalityBonus)
 }
 
 func TestScoreWithBenchmark(t *testing.T) {
@@ -148,7 +148,7 @@ func TestScoreWithBenchmark(t *testing.T) {
 	result := Score(servers, scoring, "HEL1")
 	require.Len(t, result, 1)
 	assert.Greater(t, result[0].Score, 0.0)
-	assert.Greater(t, result[0].Breakdown.BenchmarkPerDollar, 0.0,
+	assert.Greater(t, result[0].BenchmarkPerDollar, 0.0,
 		"should have non-zero benchmark component")
 }
 
@@ -196,8 +196,8 @@ func TestECCScoring(t *testing.T) {
 	require.NotNil(t, eccServer)
 	require.NotNil(t, nonECC)
 	assert.Greater(t, eccServer.Score, nonECC.Score)
-	assert.Equal(t, 1.0, eccServer.Breakdown.ECCBonus)
-	assert.Equal(t, 0.0, nonECC.Breakdown.ECCBonus)
+	assert.Equal(t, 1.0, eccServer.ECCBonus)
+	assert.Equal(t, 0.0, nonECC.ECCBonus)
 }
 
 func TestScoreBackwardCompat(t *testing.T) {
@@ -225,6 +225,6 @@ func TestScoreBackwardCompat(t *testing.T) {
 	require.Len(t, result, 1)
 	// Benchmark weight is 0, so benchmark component should not affect score
 	// But BenchmarkPerDollar should still be computed for display
-	assert.Greater(t, result[0].Breakdown.BenchmarkPerDollar, 0.0,
+	assert.Greater(t, result[0].BenchmarkPerDollar, 0.0,
 		"benchmark per dollar should still be computed")
 }

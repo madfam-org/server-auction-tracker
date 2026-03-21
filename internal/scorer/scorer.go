@@ -45,17 +45,17 @@ func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []
 	metrics := make([]rawMetrics, len(servers))
 	var maxCPU, maxRAM, maxStorage, maxBenchmark float64
 
-	for i, srv := range servers {
-		price := srv.Price
+	for i := range servers {
+		price := servers[i].Price
 		if price <= 0 {
 			price = 1 // avoid division by zero
 		}
 
-		cpuInfo := cpupkg.Parse(srv.CPU, srv.ParsedCores, srv.ParsedThreads, 0)
+		cpuInfo := cpupkg.Parse(servers[i].CPU, servers[i].ParsedCores, servers[i].ParsedThreads, 0)
 
 		cores := float64(cpuInfo.Cores)
 		if cores == 0 {
-			cores = float64(srv.CPUCount)
+			cores = float64(servers[i].CPUCount)
 		}
 		threads := float64(cpuInfo.Threads)
 		if threads == 0 {
@@ -67,16 +67,16 @@ func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []
 		}
 
 		cpuVal := cores * threads * ghz / price
-		ramVal := float64(srv.RAMSize) / price
-		storageVal := srv.TotalStorageTB / price
+		ramVal := float64(servers[i].RAMSize) / price
+		storageVal := servers[i].TotalStorageTB / price
 
 		var nvmeRatio float64
-		if srv.DriveCount > 0 {
-			nvmeRatio = float64(srv.NVMeCount) / float64(srv.DriveCount)
+		if servers[i].DriveCount > 0 {
+			nvmeRatio = float64(servers[i].NVMeCount) / float64(servers[i].DriveCount)
 		}
 
 		var dcMatch float64
-		if dcPrefix != "" && len(srv.Datacenter) >= len(dcPrefix) && srv.Datacenter[:len(dcPrefix)] == dcPrefix {
+		if dcPrefix != "" && len(servers[i].Datacenter) >= len(dcPrefix) && servers[i].Datacenter[:len(dcPrefix)] == dcPrefix {
 			dcMatch = 1.0
 		}
 
@@ -103,7 +103,7 @@ func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []
 
 	// Normalize and score
 	scored := make([]ScoredServer, len(servers))
-	for i, srv := range servers {
+	for i := range servers {
 		m := metrics[i]
 
 		cpuNorm := safeNormalize(m.cpuPerDollar, maxCPU)
@@ -112,7 +112,7 @@ func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []
 		benchmarkNorm := safeNormalize(m.benchmarkPerDollar, maxBenchmark)
 
 		var eccBonus float64
-		if srv.IsECC {
+		if servers[i].IsECC {
 			eccBonus = 1.0
 		}
 
@@ -126,7 +126,7 @@ func Score(servers []scanner.Server, scoring config.Scoring, dcPrefix string) []
 			eccBonus*scoring.ECCWeight
 
 		scored[i] = ScoredServer{
-			Server: srv,
+			Server: servers[i],
 			Score:  math.Round(rawScore*10000) / 100, // 0-100 scale
 			Breakdown: Breakdown{
 				CPUPerDollar:       cpuNorm,

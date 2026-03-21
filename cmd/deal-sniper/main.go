@@ -38,16 +38,17 @@ func main() {
 	if err != nil {
 		log.Fatalf("opening database: %v", err)
 	}
-	defer db.Close()
 
 	if err := db.Init(); err != nil {
+		_ = db.Close()
 		log.Fatalf("initializing database: %v", err)
 	}
+	defer db.Close() //nolint:errcheck
 
 	s := &server{
 		store:   db,
 		config:  cfg,
-		orderer: order.NewRobotClient(cfg.Order),
+		orderer: order.NewRobotClient(&cfg.Order),
 	}
 
 	mux := http.NewServeMux()
@@ -127,12 +128,12 @@ func (s *server) handleLatest(w http.ResponseWriter, r *http.Request) {
 	stats, _ := s.store.GetAllCPUStats()
 
 	enriched := make([]enrichedRecord, len(records))
-	for i, r := range records {
-		enriched[i].ScanRecord = r
+	for i := range records {
+		enriched[i].ScanRecord = records[i]
 		if stats != nil {
-			if cpuStat, ok := stats[r.CPU]; ok && cpuStat.AvgPrice > 0 {
-				enriched[i].DealQualityPct = ((cpuStat.AvgPrice - r.Price) / cpuStat.AvgPrice) * 100
-				enriched[i].Percentile = computePercentile(r.Price, cpuStat.MinPrice, cpuStat.MaxPrice)
+			if cpuStat, ok := stats[records[i].CPU]; ok && cpuStat.AvgPrice > 0 {
+				enriched[i].DealQualityPct = ((cpuStat.AvgPrice - records[i].Price) / cpuStat.AvgPrice) * 100
+				enriched[i].Percentile = computePercentile(records[i].Price, cpuStat.MinPrice, cpuStat.MaxPrice)
 			}
 		}
 	}
@@ -208,9 +209,9 @@ func (s *server) handleSimulate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Build a minimal scanner.Server from the scan record for simulation
-	srv := scanRecordToServer(*found)
+	srv := scanRecordToServer(found)
 	currentCost := float64(s.config.Cluster.Nodes) * 50.0 // estimate from existing nodes
-	result := simulate.Simulate(s.config.Cluster, srv, currentCost)
+	result := simulate.Simulate(&s.config.Cluster, &srv, currentCost)
 
 	writeJSON(w, http.StatusOK, simulateResponse{
 		Result:     result,
@@ -263,11 +264,11 @@ func (s *server) handleExport(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Disposition", "attachment; filename=deal-sniper-export.csv")
 		w.WriteHeader(http.StatusOK)
 		fmt.Fprintln(w, "ServerID,CPU,RAM_GB,Storage_TB,NVMe,Drives,Datacenter,Price_EUR,Score,ScannedAt")
-		for _, r := range records {
+		for i := range records {
 			fmt.Fprintf(w, "%d,%q,%d,%.2f,%d,%d,%q,%.2f,%.1f,%s\n",
-				r.ServerID, r.CPU, r.RAMSize, r.TotalStorageTB,
-				r.NVMeCount, r.DriveCount, r.Datacenter,
-				r.Price, r.Score, r.ScannedAt.Format(time.RFC3339))
+				records[i].ServerID, records[i].CPU, records[i].RAMSize, records[i].TotalStorageTB,
+				records[i].NVMeCount, records[i].DriveCount, records[i].Datacenter,
+				records[i].Price, records[i].Score, records[i].ScannedAt.Format(time.RFC3339))
 		}
 	default:
 		w.Header().Set("Content-Type", "application/json")
@@ -297,14 +298,14 @@ func (s *server) handleMetrics(w http.ResponseWriter, _ *http.Request) {
 	var sumPrice, bestScore float64
 	var lastScan time.Time
 
-	for _, r := range records {
+	for i := range records {
 		total++
-		sumPrice += r.Price
-		if r.Score > bestScore {
-			bestScore = r.Score
+		sumPrice += records[i].Price
+		if records[i].Score > bestScore {
+			bestScore = records[i].Score
 		}
-		if r.ScannedAt.After(lastScan) {
-			lastScan = r.ScannedAt
+		if records[i].ScannedAt.After(lastScan) {
+			lastScan = records[i].ScannedAt
 		}
 	}
 

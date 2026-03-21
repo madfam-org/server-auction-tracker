@@ -50,7 +50,7 @@ func runScan(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("opening database: %w", err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 
 	if err := db.Init(); err != nil {
 		return fmt.Errorf("initializing database: %w", err)
@@ -72,17 +72,17 @@ func printResults(servers []scorer.ScoredServer) {
 	fmt.Fprintln(w, "SCORE\tID\tCPU\tRAM\tSTORAGE\tNVMe\tDC\tPRICE")
 	fmt.Fprintln(w, "-----\t--\t---\t---\t-------\t----\t--\t-----")
 
-	for _, ss := range servers {
+	for i := range servers {
 		fmt.Fprintf(w, "%.1f\t%d\t%s\t%dGB\t%.1fTB\t%d/%d\t%s\t€%.2f\n",
-			ss.Score,
-			ss.Server.ID,
-			truncate(ss.Server.CPU, 30),
-			ss.Server.RAMSize,
-			ss.Server.TotalStorageTB,
-			ss.Server.NVMeCount,
-			ss.Server.DriveCount,
-			ss.Server.Datacenter,
-			ss.Server.Price,
+			servers[i].Score,
+			servers[i].Server.ID,
+			truncate(servers[i].Server.CPU, 30),
+			servers[i].Server.RAMSize,
+			servers[i].Server.TotalStorageTB,
+			servers[i].Server.NVMeCount,
+			servers[i].Server.DriveCount,
+			servers[i].Server.Datacenter,
+			servers[i].Server.Price,
 		)
 	}
 	w.Flush()

@@ -14,45 +14,45 @@ import (
 )
 
 func TestCheckEligibilityAllPass(t *testing.T) {
-	client := NewRobotClient(config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
+	client := NewRobotClient(&config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
 	server := scanner.Server{ID: 1001, Price: 39}
-	check := client.CheckEligibility(server, 92.0, config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
+	check := client.CheckEligibility(&server, 92.0, &config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
 
 	assert.True(t, check.Eligible)
 	assert.Empty(t, check.Reasons)
 }
 
 func TestCheckEligibilityDisabled(t *testing.T) {
-	client := NewRobotClient(config.Order{Enabled: false})
+	client := NewRobotClient(&config.Order{Enabled: false})
 	server := scanner.Server{ID: 1001, Price: 39}
-	check := client.CheckEligibility(server, 95.0, config.Order{Enabled: false, MinScore: 90, MaxPriceEUR: 80})
+	check := client.CheckEligibility(&server, 95.0, &config.Order{Enabled: false, MinScore: 90, MaxPriceEUR: 80})
 
 	assert.False(t, check.Eligible)
 	assert.Contains(t, check.Reasons[0], "disabled")
 }
 
 func TestCheckEligibilityScoreTooLow(t *testing.T) {
-	client := NewRobotClient(config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
+	client := NewRobotClient(&config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
 	server := scanner.Server{ID: 1001, Price: 39}
-	check := client.CheckEligibility(server, 85.0, config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
+	check := client.CheckEligibility(&server, 85.0, &config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
 
 	assert.False(t, check.Eligible)
 	assert.Contains(t, check.Reasons[0], "score 85.0 below minimum 90.0")
 }
 
 func TestCheckEligibilityPriceTooHigh(t *testing.T) {
-	client := NewRobotClient(config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
+	client := NewRobotClient(&config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
 	server := scanner.Server{ID: 1001, Price: 95}
-	check := client.CheckEligibility(server, 92.0, config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
+	check := client.CheckEligibility(&server, 92.0, &config.Order{Enabled: true, MinScore: 90, MaxPriceEUR: 80})
 
 	assert.False(t, check.Eligible)
 	assert.Contains(t, check.Reasons[0], "price")
 }
 
 func TestCheckEligibilityMultipleFailures(t *testing.T) {
-	client := NewRobotClient(config.Order{})
+	client := NewRobotClient(&config.Order{})
 	server := scanner.Server{ID: 1001, Price: 95}
-	check := client.CheckEligibility(server, 50.0, config.Order{Enabled: false, MinScore: 90, MaxPriceEUR: 80})
+	check := client.CheckEligibility(&server, 50.0, &config.Order{Enabled: false, MinScore: 90, MaxPriceEUR: 80})
 
 	assert.False(t, check.Eligible)
 	assert.Len(t, check.Reasons, 3) // disabled + score + price
@@ -76,7 +76,7 @@ func TestRobotOrderSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	client := NewRobotClient(config.Order{
+	client := NewRobotClient(&config.Order{
 		RobotURL:      srv.URL,
 		RobotUser:     "testuser",
 		RobotPassword: "testpass",
@@ -91,11 +91,11 @@ func TestRobotOrderSuccess(t *testing.T) {
 func TestRobotOrderHTTPError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte(`{"error": "server not found"}`))
+		w.Write([]byte(`{"error": "server not found"}`)) //nolint:errcheck
 	}))
 	defer srv.Close()
 
-	client := NewRobotClient(config.Order{RobotURL: srv.URL})
+	client := NewRobotClient(&config.Order{RobotURL: srv.URL})
 	result, err := client.Order(context.Background(), 9999)
 	require.NoError(t, err)
 	assert.False(t, result.Success)

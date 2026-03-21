@@ -47,7 +47,7 @@ func runOrder(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("opening database: %w", err)
 	}
-	defer db.Close()
+	defer db.Close() //nolint:errcheck
 	if err := db.Init(); err != nil {
 		return fmt.Errorf("initializing database: %w", err)
 	}
@@ -78,8 +78,8 @@ func runOrder(cmd *cobra.Command, args []string) error {
 	serverScore := scored[0].Score
 
 	// Eligibility check
-	client := order.NewRobotClient(cfg.Order)
-	check := client.CheckEligibility(*target, serverScore, cfg.Order)
+	client := order.NewRobotClient(&cfg.Order)
+	check := client.CheckEligibility(target, serverScore, &cfg.Order)
 	if !check.Eligible {
 		fmt.Println("Order NOT eligible:")
 		for _, reason := range check.Reasons {

@@ -152,7 +152,7 @@ func TestFilterMixedDriveSizes(t *testing.T) {
 		MinDriveSizeGB: 512,
 	}
 
-	result := passesFilters(server, filters)
+	result := passesFilters(&server, &filters)
 	assert.True(t, result, "server with at least one drive >= 512GB should pass")
 }
 
@@ -172,7 +172,7 @@ func TestFilterAllSmallDrives(t *testing.T) {
 		MinDriveSizeGB: 512,
 	}
 
-	result := passesFilters(server, filters)
+	result := passesFilters(&server, &filters)
 	assert.False(t, result, "server with all drives < 512GB should fail")
 }
 

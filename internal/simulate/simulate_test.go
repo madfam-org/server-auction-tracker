@@ -31,7 +31,7 @@ func TestSimulateWithRealClusterValues(t *testing.T) {
 		Datacenter:     "HEL1-DC7",
 	}
 
-	r := Simulate(cluster, server, 55.00)
+	r := Simulate(&cluster, &server, 55.00)
 
 	// CPU: 10460 / 12000 = 87.2% -> 10460 / (12000 + 24000) = 29.1%
 	assert.InDelta(t, 87.2, r.CPUBefore, 0.1)
@@ -74,7 +74,7 @@ func TestSimulateSmallServer(t *testing.T) {
 		Price:          39.00,
 	}
 
-	r := Simulate(cluster, server, 55.00)
+	r := Simulate(&cluster, &server, 55.00)
 
 	// CPU: 10460/12000 = 87.2% -> 10460/18000 = 58.1%
 	assert.InDelta(t, 87.2, r.CPUBefore, 0.1)

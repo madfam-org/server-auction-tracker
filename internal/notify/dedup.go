@@ -30,13 +30,13 @@ func (d *DedupTracker) Filter(servers []scorer.ScoredServer) []scorer.ScoredServ
 	now := time.Now()
 	var result []scorer.ScoredServer
 
-	for _, s := range servers {
-		lastSeen, exists := d.seen[s.Server.ID]
+	for i := range servers {
+		lastSeen, exists := d.seen[servers[i].Server.ID]
 		if exists && now.Sub(lastSeen) < d.window {
 			continue
 		}
-		d.seen[s.Server.ID] = now
-		result = append(result, s)
+		d.seen[servers[i].Server.ID] = now
+		result = append(result, servers[i])
 	}
 
 	// Purge expired entries

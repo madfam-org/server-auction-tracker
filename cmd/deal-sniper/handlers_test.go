@@ -26,7 +26,7 @@ type mockOrderer struct {
 	orderErr    error
 }
 
-func (m *mockOrderer) CheckEligibility(server scanner.Server, score float64, cfg config.Order) *order.Check {
+func (m *mockOrderer) CheckEligibility(server *scanner.Server, score float64, cfg *config.Order) *order.Check {
 	if m.checkResult != nil {
 		return m.checkResult
 	}
@@ -316,7 +316,7 @@ func TestScanRecordToServer(t *testing.T) {
 		Datacenter:     "HEL1-DC14",
 		Price:          72.50,
 	}
-	srv := scanRecordToServer(r)
+	srv := scanRecordToServer(&r)
 	assert.Equal(t, 12345, srv.ID)
 	assert.Equal(t, "AMD Ryzen 9 5950X", srv.CPU)
 	assert.Equal(t, 128, srv.RAMSize)

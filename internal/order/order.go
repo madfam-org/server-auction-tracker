@@ -24,5 +24,5 @@ type Check struct {
 // Orderer handles automated server ordering via the Hetzner Robot API.
 type Orderer interface {
 	Order(ctx context.Context, serverID int) (*Result, error)
-	CheckEligibility(server scanner.Server, score float64, cfg config.Order) *Check
+	CheckEligibility(server *scanner.Server, score float64, cfg *config.Order) *Check
 }

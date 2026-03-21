@@ -20,14 +20,14 @@ type RobotClient struct {
 }
 
 // NewRobotClient creates a new Hetzner Robot API client.
-func NewRobotClient(cfg config.Order) *RobotClient {
+func NewRobotClient(cfg *config.Order) *RobotClient {
 	return &RobotClient{
-		cfg:    cfg,
+		cfg:    *cfg,
 		client: &http.Client{Timeout: 30 * time.Second},
 	}
 }
 
-func (r *RobotClient) CheckEligibility(server scanner.Server, score float64, cfg config.Order) *Check {
+func (r *RobotClient) CheckEligibility(server *scanner.Server, score float64, cfg *config.Order) *Check {
 	check := &Check{Eligible: true}
 
 	if !cfg.Enabled {
