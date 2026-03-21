@@ -2,9 +2,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - ../base
+- ../base
 
 images:
-  - name: foundry-scout
-    newName: ghcr.io/madfam-org/foundry-scout
-    newTag: latest
+- name: foundry-scout
+  newName: ghcr.io/madfam-org/foundry-scout
+  newTag: latest
+- digest: sha256:fe4753b862d4ff80b113f1ed69d1073e88b5155b0c3f4d62b2d1e22d59e9bd2b
+  name: ghcr.io/madfam-org/foundry-scout
+  newName: ghcr.io/madfam-org/foundry-scout
