@@ -69,8 +69,8 @@ func runScan(cmd *cobra.Command, args []string) error {
 
 func printResults(servers []scorer.ScoredServer) {
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "SCORE\tID\tCPU\tRAM\tSTORAGE\tNVMe\tDC\tPRICE")
-	fmt.Fprintln(w, "-----\t--\t---\t---\t-------\t----\t--\t-----")
+	fmt.Fprintln(w, "SCORE\tID\tCPU\tRAM\tSTORAGE\tNVMe\tDC\tPRICE")   //nolint:errcheck
+	fmt.Fprintln(w, "-----\t--\t---\t---\t-------\t----\t--\t-----") //nolint:errcheck
 
 	for _, ss := range servers {
 		fmt.Fprintf(w, "%.1f\t%d\t%s\t%dGB\t%.1fTB\t%d/%d\t%s\t€%.2f\n",
@@ -85,7 +85,7 @@ func printResults(servers []scorer.ScoredServer) {
 			ss.Server.Price,
 		)
 	}
-	w.Flush()
+	w.Flush() //nolint:errcheck
 	fmt.Printf("\n%d servers found matching filters.\n", len(servers))
 }
 

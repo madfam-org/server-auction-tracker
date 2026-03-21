@@ -51,7 +51,7 @@ func (c *RetryClient) Do(req *http.Request) (*http.Response, error) {
 			return resp, nil
 		}
 		lastErr = fmt.Errorf("HTTP %d", resp.StatusCode)
-		resp.Body.Close()
+		resp.Body.Close() //nolint:errcheck
 		log.WithFields(log.Fields{
 			"attempt": attempt + 1,
 			"status":  resp.StatusCode,

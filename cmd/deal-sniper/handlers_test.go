@@ -87,7 +87,7 @@ func setupTestServer(t *testing.T) (*server, func()) {
 		config:  cfg,
 		orderer: &mockOrderer{},
 	}
-	cleanup := func() { db.Close(); os.RemoveAll(dir) }
+	cleanup := func() { _ = db.Close(); _ = os.RemoveAll(dir) }
 	return s, cleanup
 }
 
@@ -355,7 +355,7 @@ func TestAuthMiddleware_NoToken(t *testing.T) {
 	defer cleanup()
 
 	// No DEAL_SNIPER_AUTH_TOKEN set → 503
-	os.Unsetenv("DEAL_SNIPER_AUTH_TOKEN")
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "")
 	handler := s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 	})

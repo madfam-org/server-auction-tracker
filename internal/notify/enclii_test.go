@@ -33,7 +33,7 @@ func TestEncliiNotifier(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		body, _ := io.ReadAll(r.Body)
-		json.Unmarshal(body, &received)
+		require.NoError(t, json.Unmarshal(body, &received))
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()

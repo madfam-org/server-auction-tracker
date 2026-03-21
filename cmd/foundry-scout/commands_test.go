@@ -66,10 +66,10 @@ func TestPrintResults(t *testing.T) {
 
 	printResults(servers)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
 	assert.Contains(t, output, "SCORE")
@@ -127,7 +127,7 @@ var testAuctionJSON = `{
 func TestRunScanWithMockServer(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(testAuctionJSON))
+		_, _ = w.Write([]byte(testAuctionJSON))
 	}))
 	defer srv.Close()
 
@@ -168,7 +168,7 @@ func TestRunHistoryWithPreSeededDB(t *testing.T) {
 		},
 	}
 	require.NoError(t, db.SaveScan(servers))
-	db.Close()
+	_ = db.Close()
 
 	// Set up config
 	configContent := "database:\n  path: \"" + dbPath + "\"\nlog_level: \"error\"\n"
@@ -190,10 +190,10 @@ func TestRunHistoryWithPreSeededDB(t *testing.T) {
 
 	err = runHistory(historyCmd, nil)
 
-	w.Close()
+	_ = w.Close()
 	os.Stdout = old
 	var buf bytes.Buffer
-	buf.ReadFrom(r)
+	_, _ = buf.ReadFrom(r)
 	output := buf.String()
 
 	require.NoError(t, err)

@@ -86,7 +86,7 @@ func (r *RobotClient) Order(ctx context.Context, serverID int) (*Result, error) 
 	if err != nil {
 		return nil, fmt.Errorf("posting order: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {

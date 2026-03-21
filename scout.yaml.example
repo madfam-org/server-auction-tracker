@@ -7,15 +7,18 @@ filters:
   datacenter_prefix: "HEL1"
 
 scoring:
-  cpu_weight: 0.30
-  ram_weight: 0.25
-  storage_weight: 0.20
+  cpu_weight: 0.25
+  ram_weight: 0.20
+  storage_weight: 0.15
   nvme_weight: 0.10
   cpu_gen_weight: 0.10
   locality_weight: 0.05
+  benchmark_weight: 0.10   # PassMark CPU benchmark per dollar (0.0 to disable)
+  ecc_weight: 0.05         # ECC memory bonus (0.0 to disable)
 
 database:
   path: "foundry-scout.db"
+  retention_days: 90
 
 log_level: "info"
 
@@ -24,7 +27,11 @@ watch:
   dedup_window: "1h"
 
 notify:
-  type: "enclii"           # enclii | slack | discord
+  type: "enclii"           # enclii | slack | discord | webhook | telegram
+  min_score: 0             # only notify for servers scoring above this threshold
+  # channels:              # multi-channel dispatch (overrides type when set)
+  #   - type: "slack"
+  #   - type: "telegram"
   enclii:
     api_url: "http://switchyard-api.enclii.svc.cluster.local"
     project_slug: "foundry-scout"
@@ -33,6 +40,12 @@ notify:
     webhook_url: ""
   discord:
     webhook_url: ""
+  webhook:
+    url: ""
+    headers: {}
+  telegram:
+    bot_token: ""
+    chat_id: ""
 
 cluster:
   cpu_millicores: 12000
@@ -51,3 +64,9 @@ order:
   min_score: 90
   max_price_eur: 80
   require_approval: true
+
+digest:
+  enabled: false
+  schedule: "daily"         # "daily" or "weekly"
+  top_n: 5
+  min_score: 70
