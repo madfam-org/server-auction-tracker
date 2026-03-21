@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Deal Sniper — Server Auction Tracker</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎯</text></svg>">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"/>
+                    <circle cx="12" cy="12" r="6"/>
+                    <circle cx="12" cy="12" r="2"/>
+                    <line x1="12" y1="2" x2="12" y2="4"/>
+                    <line x1="12" y1="20" x2="12" y2="22"/>
+                    <line x1="2" y1="12" x2="4" y2="12"/>
+                    <line x1="20" y1="12" x2="22" y2="12"/>
+                </svg>
+                <h1>Deal <span>Sniper</span></h1>
+            </div>
+            <div class="header-status">
+                <div class="pulse"></div>
+                <span id="last-update">Loading...</span>
+            </div>
+        </div>
+    </header>
+
+    <nav>
+        <div class="container">
+            <button class="active" data-panel="deals">Live Deals</button>
+            <button data-panel="history">Price History</button>
+            <button data-panel="orders">Order Log</button>
+            <button data-panel="config">Config</button>
+        </div>
+    </nav>
+
+    <main>
+        <!-- Live Deals Panel -->
+        <div id="panel-deals" class="panel active">
+            <div class="container">
+                <div class="stats-row" id="deal-stats"></div>
+                <div class="table-wrap">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>CPU</th>
+                                <th>RAM</th>
+                                <th>Storage</th>
+                                <th>NVMe</th>
+                                <th>DC</th>
+                                <th>Price</th>
+                                <th>Score</th>
+                                <th>Scanned</th>
+                            </tr>
+                        </thead>
+                        <tbody id="deals-table"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- Price History Panel -->
+        <div id="panel-history" class="panel">
+            <div class="container">
+                <div class="chart-controls">
+                    <select id="cpu-select">
+                        <option value="">Select CPU model...</option>
+                    </select>
+                    <span id="history-info" style="color: var(--text-muted); font-size: 0.85rem;"></span>
+                </div>
+                <div class="chart-container">
+                    <canvas id="price-chart"></canvas>
+                </div>
+                <div class="stats-row" id="cpu-stats" style="margin-top: 1rem;"></div>
+            </div>
+        </div>
+
+        <!-- Orders Panel -->
+        <div id="panel-orders" class="panel">
+            <div class="container">
+                <div class="card">
+                    <div class="card-title">Order Audit Log</div>
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Time</th>
+                                    <th>Server ID</th>
+                                    <th>Score</th>
+                                    <th>Price</th>
+                                    <th>Status</th>
+                                    <th>Message</th>
+                                </tr>
+                            </thead>
+                            <tbody id="orders-table"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Config Panel -->
+        <div id="panel-config" class="panel">
+            <div class="container">
+                <div class="config-grid" id="config-grid"></div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Simulation Modal -->
+    <div class="modal-overlay" id="sim-modal">
+        <div class="modal">
+            <button class="modal-close" onclick="closeSimModal()">&times;</button>
+            <h2 style="font-size: 1.1rem; margin-bottom: 1rem;">Cluster Impact Simulation</h2>
+            <div id="sim-server-info" style="margin-bottom: 1rem;"></div>
+            <div class="sim-grid" id="sim-grid"></div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

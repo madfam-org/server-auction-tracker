@@ -1,0 +1,267 @@
+package main
+
+import (
+	"embed"
+	"encoding/json"
+	"flag"
+	"fmt"
+	"io/fs"
+	"net/http"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/madfam-org/server-auction-tracker/internal/config"
+	"github.com/madfam-org/server-auction-tracker/internal/simulate"
+	"github.com/madfam-org/server-auction-tracker/internal/store"
+	log "github.com/sirupsen/logrus"
+)
+
+//go:embed web
+var webFS embed.FS
+
+func main() {
+	cfgPath := flag.String("config", "", "path to scout.yaml config file")
+	addr := flag.String("addr", ":4205", "listen address")
+	flag.Parse()
+
+	cfg, err := config.Load(*cfgPath)
+	if err != nil {
+		log.Fatalf("loading config: %v", err)
+	}
+
+	db, err := store.NewSQLite(cfg.Database.Path)
+	if err != nil {
+		log.Fatalf("opening database: %v", err)
+	}
+	defer db.Close()
+
+	if err := db.Init(); err != nil {
+		log.Fatalf("initializing database: %v", err)
+	}
+
+	s := &server{
+		store:  db,
+		config: cfg,
+	}
+
+	mux := http.NewServeMux()
+
+	// API routes
+	mux.HandleFunc("GET /api/health", s.handleHealth)
+	mux.HandleFunc("GET /api/latest", s.handleLatest)
+	mux.HandleFunc("GET /api/history", s.handleHistory)
+	mux.HandleFunc("GET /api/stats", s.handleAllStats)
+	mux.HandleFunc("GET /api/stats/{cpu}", s.handleCPUStats)
+	mux.HandleFunc("GET /api/simulate/{server_id}", s.handleSimulate)
+	mux.HandleFunc("GET /api/orders", s.handleOrders)
+	mux.HandleFunc("GET /api/config", s.handleConfig)
+
+	// Static frontend
+	webSub, err := fs.Sub(webFS, "web")
+	if err != nil {
+		log.Fatalf("embedded web fs: %v", err)
+	}
+	mux.Handle("GET /", http.FileServer(http.FS(webSub)))
+
+	srv := &http.Server{
+		Addr:         *addr,
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	log.WithField("addr", *addr).Info("Deal Sniper web server starting")
+	if err := srv.ListenAndServe(); err != nil {
+		fmt.Fprintf(os.Stderr, "server error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+type server struct {
+	store  store.Store
+	config *config.Config
+}
+
+func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *server) handleLatest(w http.ResponseWriter, r *http.Request) {
+	limit := queryInt(r, "limit", 50)
+	records, err := s.store.GetHistory("", limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, records)
+}
+
+func (s *server) handleHistory(w http.ResponseWriter, r *http.Request) {
+	cpu := r.URL.Query().Get("cpu")
+	limit := queryInt(r, "limit", 100)
+	records, err := s.store.GetHistory(cpu, limit)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, records)
+}
+
+func (s *server) handleAllStats(w http.ResponseWriter, r *http.Request) {
+	stats, err := s.store.GetAllCPUStats()
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *server) handleCPUStats(w http.ResponseWriter, r *http.Request) {
+	cpu := r.PathValue("cpu")
+	stats, err := s.store.GetStats(cpu)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	if stats == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no data for CPU model"})
+		return
+	}
+	writeJSON(w, http.StatusOK, stats)
+}
+
+func (s *server) handleSimulate(w http.ResponseWriter, r *http.Request) {
+	serverIDStr := r.PathValue("server_id")
+	serverID, err := strconv.Atoi(serverIDStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid server_id"})
+		return
+	}
+
+	// Look up the server from the most recent scan data
+	records, err := s.store.GetHistory("", 500)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	var found *store.ScanRecord
+	for i := range records {
+		if records[i].ServerID == serverID {
+			found = &records[i]
+			break
+		}
+	}
+	if found == nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "server not found in recent scans"})
+		return
+	}
+
+	// Build a minimal scanner.Server from the scan record for simulation
+	srv := scanRecordToServer(*found)
+	currentCost := float64(s.config.Cluster.Nodes) * 50.0 // estimate from existing nodes
+	result := simulate.Simulate(s.config.Cluster, srv, currentCost)
+
+	writeJSON(w, http.StatusOK, simulateResponse{
+		Result:     result,
+		HealthBefore: healthLabels(result.CPUBefore, result.RAMBefore, result.DiskBefore),
+		HealthAfter:  healthLabels(result.CPUAfter, result.RAMAfter, result.DiskAfter),
+	})
+}
+
+func (s *server) handleOrders(w http.ResponseWriter, r *http.Request) {
+	// Direct query — store interface doesn't expose order reads, so query the DB directly
+	sqlStore, ok := s.store.(*store.SQLiteStore)
+	if !ok {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "orders not available"})
+		return
+	}
+
+	orders, err := getOrderAttempts(sqlStore)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, orders)
+}
+
+func (s *server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	// Return config with secrets redacted
+	redacted := configResponse{
+		Filters: s.config.Filters,
+		Scoring: s.config.Scoring,
+		Cluster: s.config.Cluster,
+		Watch:   s.config.Watch,
+		Order: orderRedacted{
+			Enabled:         s.config.Order.Enabled,
+			MinScore:        s.config.Order.MinScore,
+			MaxPriceEUR:     s.config.Order.MaxPriceEUR,
+			RequireApproval: s.config.Order.RequireApproval,
+		},
+	}
+	writeJSON(w, http.StatusOK, redacted)
+}
+
+// --- helpers ---
+
+func writeJSON(w http.ResponseWriter, status int, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(v) //nolint:errcheck
+}
+
+func queryInt(r *http.Request, key string, defaultVal int) int {
+	s := r.URL.Query().Get(key)
+	if s == "" {
+		return defaultVal
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil || v <= 0 {
+		return defaultVal
+	}
+	return v
+}
+
+// --- types ---
+
+type simulateResponse struct {
+	Result       *simulate.Result       `json:"result"`
+	HealthBefore map[string]string      `json:"health_before"`
+	HealthAfter  map[string]string      `json:"health_after"`
+}
+
+type configResponse struct {
+	Filters config.Filters `json:"filters"`
+	Scoring config.Scoring `json:"scoring"`
+	Cluster config.Cluster `json:"cluster"`
+	Watch   config.Watch   `json:"watch"`
+	Order   orderRedacted  `json:"order"`
+}
+
+type orderRedacted struct {
+	Enabled         bool    `json:"enabled"`
+	MinScore        float64 `json:"min_score"`
+	MaxPriceEUR     float64 `json:"max_price_eur"`
+	RequireApproval bool    `json:"require_approval"`
+}
+
+type orderAttempt struct {
+	ID          int       `json:"id"`
+	ServerID    int       `json:"server_id"`
+	Score       float64   `json:"score"`
+	Price       float64   `json:"price"`
+	Success     bool      `json:"success"`
+	Message     string    `json:"message"`
+	AttemptedAt time.Time `json:"attempted_at"`
+}
+
+func healthLabels(cpu, ram, disk float64) map[string]string {
+	return map[string]string{
+		"cpu":  simulate.HealthLabel(cpu),
+		"ram":  simulate.HealthLabel(ram),
+		"disk": simulate.HealthLabel(disk),
+	}
+}

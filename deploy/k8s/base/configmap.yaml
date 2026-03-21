@@ -8,11 +8,11 @@ metadata:
 data:
   scout.yaml: |
     filters:
-      min_ram_gb: 64
+      min_ram_gb: 128
       min_cpu_cores: 8
       min_drives: 2
       min_drive_size_gb: 512
-      max_price_eur: 90
+      max_price_eur: 85
       datacenter_prefix: "HEL1"
 
     scoring:
@@ -44,7 +44,7 @@ data:
       ram_gb: 64
       ram_requested_gb: 25
       disk_gb: 98
-      disk_used_gb: 77
+      disk_used_gb: 80
       nodes: 2
 
     order:

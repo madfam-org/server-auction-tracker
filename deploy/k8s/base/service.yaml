@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: deal-sniper-web
+  namespace: foundry-scout
+  labels:
+    app.kubernetes.io/name: deal-sniper-web
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: foundry-scout
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: deal-sniper-web
+  ports:
+    - name: http
+      port: 80
+      targetPort: 4205
+      protocol: TCP

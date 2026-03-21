@@ -36,3 +36,35 @@ spec:
           port: 80
         - protocol: TCP
           port: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: deal-sniper-web
+  namespace: foundry-scout
+  labels:
+    app.kubernetes.io/name: deal-sniper-web
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: deal-sniper-web
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    # Allow traffic from cloudflare-tunnel namespace
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cloudflare-tunnel
+      ports:
+        - protocol: TCP
+          port: 4205
+  egress:
+    # Allow DNS resolution
+    - to: []
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53

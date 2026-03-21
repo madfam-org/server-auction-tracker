@@ -1,5 +1,6 @@
 # Go binaries
 /foundry-scout
+/deal-sniper
 *.exe
 *.dll
 *.so

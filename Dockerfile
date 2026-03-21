@@ -9,6 +9,7 @@ RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=1 go build -o foundry-scout ./cmd/foundry-scout
+RUN CGO_ENABLED=1 go build -o deal-sniper ./cmd/deal-sniper
 
 FROM alpine:3.20
 
@@ -18,6 +19,7 @@ RUN apk add --no-cache ca-certificates && \
 
 WORKDIR /app
 COPY --from=builder /build/foundry-scout .
+COPY --from=builder /build/deal-sniper .
 
 USER 65532:65532
 

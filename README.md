@@ -1,8 +1,8 @@
-# server-auction-tracker
+# Deal Sniper
 
-Hetzner Server Auction intelligence — automated scoring, price history, notifications, and cluster simulation for capacity expansion.
+Hetzner Server Auction intelligence — automated scoring, price history, notifications, cluster simulation, and a web dashboard for capacity expansion.
 
-**Binary**: `foundry-scout`
+**CLI Binary**: `foundry-scout` | **Web Binary**: `deal-sniper` | **Dashboard**: [sniper.madfam.io](https://sniper.madfam.io)
 
 ## Features
 
@@ -10,10 +10,26 @@ Hetzner Server Auction intelligence — automated scoring, price history, notifi
 - Filter servers by RAM, CPU cores, drives, price, and datacenter
 - Score servers using a cluster-aware weighted formula
 - Persist scan results to SQLite for price history and trend analysis
+- **Web dashboard** with live deals, price charts, cluster simulator, and order audit log
 - Query historical pricing by CPU model with min/max/avg stats and deal quality
 - Watch mode with dedup and notifications (enclii, Slack, Discord)
 - Simulate cluster impact of adding a server
 - Auto-order via Hetzner Robot API with safety gates
+
+## Web Dashboard
+
+The Deal Sniper web UI is served at port 4205 and provides:
+
+- **Live Deals** — Table of latest scored servers with auto-refresh (60s). Click any row to simulate cluster impact.
+- **Price History** — Line charts showing price/score over time per CPU model.
+- **Order Log** — Audit trail of all order attempts.
+- **Config** — Read-only view of current filters, scoring weights, and cluster profile.
+
+```bash
+# Run locally
+./deal-sniper --config scout.yaml
+# Open http://localhost:4205
+```
 
 ## Install
 
@@ -21,13 +37,14 @@ Hetzner Server Auction intelligence — automated scoring, price history, notifi
 # From source (requires Go 1.24+ and CGO)
 CGO_ENABLED=1 go install github.com/madfam-org/server-auction-tracker/cmd/foundry-scout@latest
 
-# Or clone and build
+# Or clone and build both binaries
 git clone https://github.com/madfam-org/server-auction-tracker.git
 cd server-auction-tracker
 CGO_ENABLED=1 go build -o foundry-scout ./cmd/foundry-scout
+CGO_ENABLED=1 go build -o deal-sniper ./cmd/deal-sniper
 ```
 
-## Usage
+## CLI Usage
 
 ```bash
 # One-shot scan — fetch, filter, score, and display matching servers
@@ -55,11 +72,11 @@ Copy `scout.yaml.example` to `scout.yaml` and customize:
 
 ```yaml
 filters:
-  min_ram_gb: 64
+  min_ram_gb: 128
   min_cpu_cores: 8
   min_drives: 2
   min_drive_size_gb: 512
-  max_price_eur: 90
+  max_price_eur: 85
   datacenter_prefix: "HEL1"
 
 scoring:
@@ -94,7 +111,7 @@ cluster:
   ram_gb: 64
   ram_requested_gb: 25
   disk_gb: 98
-  disk_used_gb: 77
+  disk_used_gb: 80
   nodes: 2
 
 order:
@@ -130,9 +147,13 @@ Final score scaled to 0-100.
 docker build -t foundry-scout .
 docker run --rm -v $(pwd)/scout.yaml:/config/scout.yaml -v scout-data:/data \
   foundry-scout scan --config /config/scout.yaml
+
+# Run web dashboard
+docker run --rm -p 4205:4205 -v $(pwd)/scout.yaml:/config/scout.yaml -v scout-data:/data \
+  --entrypoint ./deal-sniper foundry-scout --config /config/scout.yaml
 ```
 
-### Kubernetes (CronJob)
+### Kubernetes
 
 Manifests in `deploy/k8s/`:
 
@@ -144,9 +165,11 @@ kubectl apply --dry-run=client -f deploy/k8s/base/
 kubectl apply -k deploy/k8s/production/
 ```
 
-- CronJob runs `watch --once` every 5 minutes
+- CronJob runs `foundry-scout watch --once` every 5 minutes (writes to SQLite)
+- Deployment runs `deal-sniper` web server (reads from same SQLite PVC)
 - SQLite persisted via 1Gi PVC (Longhorn)
 - Notifications route through enclii Switchyard API
+- Web UI exposed at `sniper.madfam.io` via Cloudflare Tunnel
 - ArgoCD Application in `deploy/argocd/application.yaml`
 
 ## Notifications

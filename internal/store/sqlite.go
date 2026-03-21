@@ -208,6 +208,11 @@ func parseTimestamp(s string) time.Time {
 	return time.Time{}
 }
 
+// DB returns the underlying *sql.DB for direct queries.
+func (s *SQLiteStore) DB() *sql.DB {
+	return s.db
+}
+
 func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
