@@ -15,7 +15,3 @@ linters:
       enabled-tags:
         - diagnostic
         - performance
-
-issues:
-  exclude-dirs:
-    - vendor
