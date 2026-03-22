@@ -50,8 +50,8 @@ func TestJWKSFetcher_GetPublicKey(t *testing.T) {
 
 	pub, err := fetcher.GetPublicKey("test-kid-1")
 	require.NoError(t, err)
-	assert.Equal(t, key.PublicKey.N, pub.N)
-	assert.Equal(t, key.PublicKey.E, pub.E)
+	assert.Equal(t, key.N, pub.N)
+	assert.Equal(t, key.E, pub.E)
 }
 
 func TestJWKSFetcher_CacheHit(t *testing.T) {
@@ -65,8 +65,8 @@ func TestJWKSFetcher_CacheHit(t *testing.T) {
 					"kty": "RSA",
 					"kid": "cached-kid",
 					"use": "sig",
-					"n":   base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()),
-					"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes()),
+					"n":   base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+					"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
 				},
 			},
 		}
@@ -115,8 +115,8 @@ func TestJWKSFetcher_StaleWhileRevalidate(t *testing.T) {
 					"kty": "RSA",
 					"kid": "stale-kid",
 					"use": "sig",
-					"n":   base64.RawURLEncoding.EncodeToString(key.PublicKey.N.Bytes()),
-					"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.PublicKey.E)).Bytes()),
+					"n":   base64.RawURLEncoding.EncodeToString(key.N.Bytes()),
+					"e":   base64.RawURLEncoding.EncodeToString(big.NewInt(int64(key.E)).Bytes()),
 				},
 			},
 		}
@@ -157,5 +157,5 @@ func TestJWKSFetcher_EmptyKid(t *testing.T) {
 	// Empty kid should return the first available key
 	pub, err := fetcher.GetPublicKey("")
 	require.NoError(t, err)
-	assert.Equal(t, key.PublicKey.N, pub.N)
+	assert.Equal(t, key.N, pub.N)
 }
