@@ -16,6 +16,16 @@ type Config struct {
 	Cluster  Cluster  `mapstructure:"cluster"`
 	Order    Order    `mapstructure:"order"`
 	Digest   Digest   `mapstructure:"digest"`
+	Auth     Auth     `mapstructure:"auth"`
+}
+
+type Auth struct {
+	JanuaIssuer    string   `mapstructure:"janua_issuer"`
+	JanuaJWKSURL   string   `mapstructure:"janua_jwks_url"`
+	JanuaAudience  string   `mapstructure:"janua_audience"`
+	AllowedDomains []string `mapstructure:"allowed_domains"`
+	AllowedRoles   []string `mapstructure:"allowed_roles"`
+	JWKSCacheTTL   string   `mapstructure:"jwks_cache_ttl"`
 }
 
 type Filters struct {
@@ -156,6 +166,13 @@ func Load(path string) (*Config, error) {
 	v.SetDefault("digest.schedule", "daily")
 	v.SetDefault("digest.top_n", 5)
 	v.SetDefault("digest.min_score", 0)
+
+	v.SetDefault("auth.janua_issuer", "https://auth.madfam.io")
+	v.SetDefault("auth.janua_jwks_url", "https://auth.madfam.io/.well-known/jwks.json")
+	v.SetDefault("auth.janua_audience", "deal-sniper")
+	v.SetDefault("auth.allowed_domains", []string{"@madfam.io"})
+	v.SetDefault("auth.allowed_roles", []string{"superadmin", "admin", "operator"})
+	v.SetDefault("auth.jwks_cache_ttl", "1h")
 
 	if path != "" {
 		v.SetConfigFile(path)

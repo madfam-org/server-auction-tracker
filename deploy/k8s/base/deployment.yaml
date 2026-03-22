@@ -72,6 +72,24 @@ spec:
                   name: foundry-scout-secrets
                   key: deal-sniper-auth-token
                   optional: true
+            - name: JANUA_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: foundry-scout-secrets
+                  key: janua-client-id
+                  optional: true
+            - name: JANUA_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: foundry-scout-secrets
+                  key: janua-client-secret
+                  optional: true
+            - name: DS_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: foundry-scout-secrets
+                  key: session-secret
+                  optional: true
           volumeMounts:
             - name: config
               mountPath: /config

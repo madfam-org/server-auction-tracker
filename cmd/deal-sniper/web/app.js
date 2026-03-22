@@ -87,44 +87,62 @@ document.querySelectorAll('nav button').forEach(btn => {
     });
 });
 
-// --- Auth ---
+// --- Auth (Janua SSO) ---
 
-function getAuthToken() {
-    return sessionStorage.getItem('ds_auth_token') || '';
+let currentUser = null;
+
+function login() {
+    window.location.href = '/auth/login';
+}
+
+async function logout() {
+    try {
+        await fetch('/auth/logout', { method: 'POST' });
+    } catch { /* ignore */ }
+    currentUser = null;
+    updateAuthUI();
+    showToast('Logged out', 'info');
 }
 
 function showAuthModal() {
     document.getElementById('auth-modal').classList.add('active');
-    document.getElementById('auth-token-input').focus();
 }
 
 function closeAuthModal() {
     document.getElementById('auth-modal').classList.remove('active');
 }
 
-function saveAuthToken() {
-    const token = document.getElementById('auth-token-input').value.trim();
-    if (token) {
-        sessionStorage.setItem('ds_auth_token', token);
-        updateAuthUI();
-        showToast('Authenticated', 'success');
+async function checkAuthState() {
+    try {
+        const resp = await fetch('/auth/me');
+        if (resp.ok) {
+            currentUser = await resp.json();
+        } else {
+            currentUser = null;
+        }
+    } catch {
+        currentUser = null;
     }
-    document.getElementById('auth-token-input').value = '';
-    closeAuthModal();
+    updateAuthUI();
 }
 
 function updateAuthUI() {
-    const btn = document.getElementById('auth-btn');
-    if (getAuthToken()) {
-        btn.classList.add('authenticated');
-        btn.title = 'Authenticated (click to re-authenticate)';
+    const loginBtn = document.getElementById('sso-login-btn');
+    const badge = document.getElementById('user-badge');
+    const emailEl = document.getElementById('user-email');
+
+    if (currentUser && currentUser.email) {
+        loginBtn.style.display = 'none';
+        badge.style.display = 'flex';
+        emailEl.textContent = currentUser.email;
     } else {
-        btn.classList.remove('authenticated');
-        btn.title = 'Authenticate for orders';
+        loginBtn.style.display = 'flex';
+        badge.style.display = 'none';
+        emailEl.textContent = '';
     }
 }
 
-updateAuthUI();
+checkAuthState();
 
 // --- Data Fetching ---
 
@@ -135,8 +153,7 @@ async function fetchJSON(path) {
 }
 
 async function fetchJSONAuth(path, options = {}) {
-    const token = getAuthToken();
-    if (!token) {
+    if (!currentUser) {
         showAuthModal();
         throw new Error('Not authenticated');
     }
@@ -144,14 +161,13 @@ async function fetchJSONAuth(path, options = {}) {
         ...options,
         headers: {
             'Content-Type': 'application/json',
-            'Authorization': 'Bearer ' + token,
             ...(options.headers || {}),
         },
     });
     if (resp.status === 401) {
-        sessionStorage.removeItem('ds_auth_token');
+        currentUser = null;
         updateAuthUI();
-        showToast('Auth token invalid — please re-authenticate', 'error');
+        showToast('Session expired — please login again', 'error');
         throw new Error('Unauthorized');
     }
     if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
@@ -733,14 +749,10 @@ document.addEventListener('keydown', e => {
     }
 });
 
-document.getElementById('auth-token-input').addEventListener('keydown', e => {
-    if (e.key === 'Enter') saveAuthToken();
-});
-
 // --- Order Flow ---
 
 async function startOrderCheck(serverID) {
-    if (!getAuthToken()) {
+    if (!currentUser) {
         showAuthModal();
         return;
     }

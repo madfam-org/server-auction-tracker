@@ -52,6 +52,18 @@ data:
     order:
       enabled: false
 
+    auth:
+      janua_issuer: "https://auth.madfam.io"
+      janua_jwks_url: "https://auth.madfam.io/.well-known/jwks.json"
+      janua_audience: "deal-sniper"
+      allowed_domains:
+        - "@madfam.io"
+      allowed_roles:
+        - "superadmin"
+        - "admin"
+        - "operator"
+      jwks_cache_ttl: "1h"
+
     digest:
       enabled: false
       schedule: "daily"

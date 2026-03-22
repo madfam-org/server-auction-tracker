@@ -348,13 +348,13 @@ func TestQueryInt(t *testing.T) {
 	}
 }
 
-// --- Auth middleware tests ---
+// --- Auth middleware tests (backward compatibility: static Bearer token) ---
 
 func TestAuthMiddleware_NoToken(t *testing.T) {
 	s, cleanup := setupTestServer(t)
 	defer cleanup()
 
-	// No DEAL_SNIPER_AUTH_TOKEN set → 503
+	// No DEAL_SNIPER_AUTH_TOKEN set, no SSO configured → 503
 	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "")
 	handler := s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
@@ -416,6 +416,38 @@ func TestAuthMiddleware_CorrectToken(t *testing.T) {
 	handler(w, req)
 
 	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+// --- Auth middleware tests (dual-mode: SSO configured but static token still works) ---
+
+func TestAuthMiddleware_StaticTokenWithSSOConfigured(t *testing.T) {
+	s, cleanup := setupTestServer(t)
+	defer cleanup()
+
+	// Simulate SSO configured but validator is nil (JWKS unreachable is fine for this test)
+	// The key point: even with validator=nil, static token should still work
+	t.Setenv("DEAL_SNIPER_AUTH_TOKEN", "static-token")
+	handler := s.authMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	})
+
+	req := httptest.NewRequest("POST", "/api/order/check", nil)
+	req.Header.Set("Authorization", "Bearer static-token")
+	w := httptest.NewRecorder()
+	handler(w, req)
+
+	assert.Equal(t, http.StatusOK, w.Code)
+}
+
+func TestIsStaticTokenCandidate(t *testing.T) {
+	// Static tokens have 0 or 1 dots
+	assert.True(t, isStaticTokenCandidate("my-secret-token"))
+	assert.True(t, isStaticTokenCandidate("abc123"))
+	assert.True(t, isStaticTokenCandidate(""))
+
+	// JWTs have 2+ dots (header.payload.signature)
+	assert.False(t, isStaticTokenCandidate("eyJhbG.eyJzdW.SflKxw"))
+	assert.False(t, isStaticTokenCandidate("a.b.c"))
 }
 
 // --- Order check endpoint tests ---
