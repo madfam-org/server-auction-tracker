@@ -14,6 +14,9 @@ import (
 	"syscall"
 	"time"
 
+	"encoding/hex"
+
+	"github.com/madfam-org/server-auction-tracker/internal/auth"
 	"github.com/madfam-org/server-auction-tracker/internal/config"
 	"github.com/madfam-org/server-auction-tracker/internal/order"
 	"github.com/madfam-org/server-auction-tracker/internal/simulate"
@@ -51,6 +54,9 @@ func main() {
 		orderer: order.NewRobotClient(&cfg.Order),
 	}
 
+	// Initialize Janua SSO auth (non-fatal if unreachable)
+	s.initAuth()
+
 	mux := http.NewServeMux()
 
 	// API routes
@@ -67,6 +73,19 @@ func main() {
 	mux.HandleFunc("GET /metrics", s.handleMetrics)
 	mux.HandleFunc("POST /api/order/check", s.authMiddleware(s.handleOrderCheck))
 	mux.HandleFunc("POST /api/order/confirm", s.authMiddleware(s.handleOrderConfirm))
+
+	// Auth routes (SSO)
+	if s.oauth != nil {
+		mux.HandleFunc("GET /auth/login", s.oauth.LoginHandler)
+		mux.HandleFunc("GET /auth/callback", s.oauth.CallbackHandler)
+		mux.HandleFunc("POST /auth/logout", s.oauth.LogoutHandler)
+		mux.HandleFunc("GET /auth/me", s.oauth.MeHandler)
+	} else {
+		// Stub endpoints when SSO not configured
+		mux.HandleFunc("GET /auth/me", func(w http.ResponseWriter, r *http.Request) {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "SSO not configured"})
+		})
+	}
 
 	// Static frontend
 	webSub, err := fs.Sub(webFS, "web")
@@ -108,9 +127,66 @@ func main() {
 }
 
 type server struct {
-	store   store.Store
-	config  *config.Config
-	orderer order.Orderer
+	store     store.Store
+	config    *config.Config
+	orderer   order.Orderer
+	validator *auth.Validator
+	oauth     *auth.OAuthFlow
+}
+
+func (s *server) initAuth() {
+	clientID := os.Getenv("JANUA_CLIENT_ID")
+	clientSecret := os.Getenv("JANUA_CLIENT_SECRET")
+	sessionSecretHex := os.Getenv("DS_SESSION_SECRET")
+
+	if clientID == "" || clientSecret == "" || sessionSecretHex == "" {
+		log.Info("SSO not configured (missing JANUA_CLIENT_ID, JANUA_CLIENT_SECRET, or DS_SESSION_SECRET) — order auth falls back to Bearer token")
+		return
+	}
+
+	sessionSecret, err := hex.DecodeString(sessionSecretHex)
+	if err != nil {
+		log.WithError(err).Warn("Invalid DS_SESSION_SECRET (must be hex) — SSO disabled")
+		return
+	}
+
+	cacheTTL := time.Hour
+	if s.config.Auth.JWKSCacheTTL != "" {
+		if d, err := time.ParseDuration(s.config.Auth.JWKSCacheTTL); err == nil {
+			cacheTTL = d
+		}
+	}
+
+	issuer := s.config.Auth.JanuaIssuer
+	if issuer == "" {
+		issuer = "https://auth.madfam.io"
+	}
+	jwksURL := s.config.Auth.JanuaJWKSURL
+	if jwksURL == "" {
+		jwksURL = "https://auth.madfam.io/.well-known/jwks.json"
+	}
+	allowedDomains := s.config.Auth.AllowedDomains
+	if len(allowedDomains) == 0 {
+		allowedDomains = []string{"@madfam.io"}
+	}
+	allowedRoles := s.config.Auth.AllowedRoles
+	if len(allowedRoles) == 0 {
+		allowedRoles = []string{"superadmin", "admin", "operator"}
+	}
+
+	fetcher := auth.NewJWKSFetcher(jwksURL, cacheTTL)
+	s.validator = auth.NewValidator(fetcher, issuer, allowedDomains, allowedRoles)
+
+	authURL := issuer + "/oauth/authorize"
+	tokenURL := issuer + "/oauth/token"
+	redirectURL := "https://sniper.madfam.io/auth/callback"
+
+	s.oauth = auth.NewOAuthFlow(clientID, clientSecret, authURL, tokenURL, redirectURL, s.validator, sessionSecret)
+
+	log.WithFields(log.Fields{
+		"issuer":   issuer,
+		"jwks_url": jwksURL,
+	}).Info("Janua SSO authentication initialized")
 }
 
 func (s *server) handleHealth(w http.ResponseWriter, r *http.Request) {

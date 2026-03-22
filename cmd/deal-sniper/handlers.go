@@ -46,27 +46,61 @@ func estimateCoresFromRAM(ramGB int) int {
 
 // --- Auth middleware ---
 
-// authMiddleware checks for a valid Bearer token matching DEAL_SNIPER_AUTH_TOKEN.
+// authMiddleware validates requests using a three-tier strategy:
+//  1. Janua JWT from ds_session cookie (browser SSO)
+//  2. Bearer token validated as Janua JWT
+//  3. Bearer token matching static DEAL_SNIPER_AUTH_TOKEN env var (backward compat)
+//
+// If none succeed, returns 401. If no auth is configured at all, returns 503.
 func (s *server) authMiddleware(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token := os.Getenv("DEAL_SNIPER_AUTH_TOKEN")
-		if token == "" {
+		// 1. Try Janua JWT (cookie or Bearer) if SSO is configured
+		if s.validator != nil && s.oauth != nil {
+			tokenStr := s.oauth.ExtractToken(r)
+			if tokenStr != "" {
+				claims, err := s.validator.ValidateToken(tokenStr)
+				if err == nil && s.validator.IsAuthorized(claims) {
+					next(w, r)
+					return
+				}
+				// Token was present but invalid — don't fall through to static token
+				// unless the token looks like it could be the static token
+				if !isStaticTokenCandidate(tokenStr) {
+					writeJSON(w, http.StatusUnauthorized, map[string]string{
+						"error": "invalid or expired JWT",
+					})
+					return
+				}
+			}
+		}
+
+		// 2. Fall back to static DEAL_SNIPER_AUTH_TOKEN
+		staticToken := os.Getenv("DEAL_SNIPER_AUTH_TOKEN")
+		if staticToken == "" && s.validator == nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{
 				"error": "order API is not configured (no auth token set)",
 			})
 			return
 		}
 
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != token {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{
-				"error": "invalid or missing authorization token",
-			})
-			return
+		if staticToken != "" {
+			authHeader := r.Header.Get("Authorization")
+			if strings.HasPrefix(authHeader, "Bearer ") && strings.TrimPrefix(authHeader, "Bearer ") == staticToken {
+				next(w, r)
+				return
+			}
 		}
 
-		next(w, r)
+		writeJSON(w, http.StatusUnauthorized, map[string]string{
+			"error": "invalid or missing authorization token",
+		})
 	}
+}
+
+// isStaticTokenCandidate returns true if the token does NOT look like a JWT.
+// JWTs have three dot-separated base64 segments; static tokens typically don't.
+func isStaticTokenCandidate(token string) bool {
+	return strings.Count(token, ".") < 2
 }
 
 // --- Order handlers ---
