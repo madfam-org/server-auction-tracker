@@ -1,5 +1,13 @@
 # Deal Sniper
 
+> [!IMPORTANT]
+> MADFAM-ENCLII-FIRST-LEGACY-RAW v1: This document contains legacy raw infrastructure command examples.
+> Routine production operations must use Enclii web, API, or CLI. Treat raw
+> `kubectl`, `helm`, SSH, provider CLI/API, `docker exec`, and direct container
+> access as platform bootstrap or documented break-glass only, and record any
+> missing Enclii adapter gap.
+
+
 Hetzner Server Auction intelligence — automated scoring, price history, notifications, cluster simulation, and a web dashboard for capacity expansion.
 
 **CLI Binary**: `foundry-scout` | **Web Binary**: `deal-sniper` | **Dashboard**: [sniper.madfam.io](https://sniper.madfam.io)
