@@ -28,7 +28,8 @@ spec:
               requiredDuringSchedulingIgnoredDuringExecution:
                 - labelSelector:
                     matchLabels:
-                      app.kubernetes.io/name: deal-sniper-web
+                      app.kubernetes.io/name: foundry-scout
+                      app.kubernetes.io/component: web
                   topologyKey: kubernetes.io/hostname
           securityContext:
             runAsNonRoot: true
