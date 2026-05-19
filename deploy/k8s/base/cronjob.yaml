@@ -23,6 +23,13 @@ spec:
           restartPolicy: OnFailure
           imagePullSecrets:
             - name: ghcr-credentials
+          affinity:
+            podAffinity:
+              requiredDuringSchedulingIgnoredDuringExecution:
+                - labelSelector:
+                    matchLabels:
+                      app.kubernetes.io/name: deal-sniper-web
+                  topologyKey: kubernetes.io/hostname
           securityContext:
             runAsNonRoot: true
             runAsUser: 65532
