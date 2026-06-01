@@ -5,6 +5,6 @@ resources:
 - ../base
 
 images:
-- digest: sha256:70b14f544e3ebed2279225d9e3fb34093a0a446aaa8f8fe11fdc5c1aebbe0067
+- digest: sha256:e930df44371253956b9c070f309a1d1e6e3691981a75e4a6ea8827c84e4d8540
   name: ghcr.io/madfam-org/foundry-scout
   newName: ghcr.io/madfam-org/foundry-scout
