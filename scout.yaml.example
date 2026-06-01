@@ -1,3 +1,8 @@
+#
+# Placeholder-only config template. Keep production Robot API credentials,
+# notification webhooks, Janua secrets, and Enclii callback tokens in Enclii
+# secrets backed by Lockbox/Vault/ESO.
+#
 filters:
   min_ram_gb: 128
   min_cpu_cores: 8
@@ -57,6 +62,8 @@ cluster:
   nodes: 2
 
 order:
+  # Procurement-affecting. Leave disabled unless an operator explicitly
+  # approves budget, score floor, datacenter/capacity goal, and purchase window.
   enabled: false
   robot_url: "https://robot-ws.your-server.de"
   robot_user: ""

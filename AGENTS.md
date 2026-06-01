@@ -28,6 +28,18 @@ redirect and should not become the source of truth again.
   emergencies when Enclii is unavailable or lacks an implemented adapter.
 - Record any missing Enclii adapter gap instead of normalizing raw production
   access in docs or runbooks.
+- Treat this repository as procurement-affecting infrastructure software. Do
+  not run `foundry-scout order`, enable auto-order, replay order requests, or
+  alter order gates, score thresholds, price ceilings, datacenter filters, or
+  Robot API behavior unless the user explicitly approves the budget, target
+  capacity goal, and environment.
+- Do not run watch loops, schedulers, notification fanout, Robot API calls, or
+  database-retention mutations against production data unless explicitly
+  requested and scoped to a named safe environment.
+- Keep examples placeholder-only. Do not add live Robot credentials, Janua
+  secrets, Enclii callback tokens, notification webhook URLs, order audit data,
+  server inventory decisions, or production config files to docs, templates,
+  workflow logs, issues, PRs, or LLM chat.
 
 ## Repo entrypoints
 

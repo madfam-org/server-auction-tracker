@@ -86,6 +86,10 @@ foundry-scout order --server-id 2873962 --config scout.yaml
 
 Copy `scout.yaml.example` to `scout.yaml` and customize:
 
+Keep this file placeholder-only in Git. Production values for Janua, Enclii
+callbacks, notification webhooks, and Hetzner Robot ordering credentials must
+come from Enclii secrets backed by Lockbox/Vault/ESO.
+
 ```yaml
 filters:
   min_ram_gb: 128
@@ -121,17 +125,17 @@ notify:
   enclii:
     api_url: "http://switchyard-api.enclii.svc.cluster.local"
     project_slug: "foundry-scout"
-    webhook_secret: ""
+    webhook_secret: "replace-with-secret-store-value"
   slack:
-    webhook_url: ""
+    webhook_url: "replace-with-secret-store-value"
   discord:
     webhook_url: ""
   webhook:
-    url: ""
+    url: "replace-with-secret-store-value"
     headers: {}
   telegram:
-    bot_token: ""
-    chat_id: ""
+    bot_token: "replace-with-secret-store-value"
+    chat_id: "replace-with-chat-id"
 
 cluster:
   cpu_millicores: 12000
@@ -145,8 +149,8 @@ cluster:
 order:
   enabled: false
   robot_url: "https://robot-ws.your-server.de"
-  robot_user: ""
-  robot_password: ""
+  robot_user: "replace-with-secret-store-value"
+  robot_password: "replace-with-secret-store-value"
   min_score: 90
   max_price_eur: 80
   require_approval: true
@@ -194,10 +198,11 @@ docker run --rm -p 4205:4205 -v $(pwd)/scout.yaml:/config/scout.yaml -v scout-da
 Manifests in `deploy/k8s/`:
 
 ```bash
+# Bootstrap/break-glass only. Routine production operations are Enclii-first.
 # Validate manifests
 kubectl apply --dry-run=client -f deploy/k8s/base/
 
-# Deploy with Kustomize
+# Deploy with Kustomize only when Enclii/GitOps is unavailable
 kubectl apply -k deploy/k8s/production/
 ```
 
